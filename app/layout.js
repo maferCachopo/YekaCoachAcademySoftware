@@ -5,6 +5,7 @@ import Providers from './providers';
 import Script from 'next/script';
 import ClientLayout from './ClientLayout';
 import NextjsLogoCleaner from './components/NextjsLogoCleaner';
+import ThemeRegistry from './components/ThemeRegistry'; // Importamos el Registry
 
 const inter = Inter({
   subsets: ["latin"],
@@ -75,11 +76,14 @@ export default function RootLayout({ children }) {
           })();
         `}}
       />
-      <body className={`${inter.variable} antialiased`}>
-        <Providers>
-          <ClientLayout>{children}</ClientLayout>
-          <NextjsLogoCleaner />
-        </Providers>
+      {/* Agregamos suppressHydrationWarning para ignorar atributos de extensiones */}
+      <body className={`${inter.variable} antialiased`} suppressHydrationWarning={true}>
+        <ThemeRegistry>
+          <Providers>
+            <ClientLayout>{children}</ClientLayout>
+            <NextjsLogoCleaner />
+          </Providers>
+        </ThemeRegistry>
       </body>
     </html>
   );
