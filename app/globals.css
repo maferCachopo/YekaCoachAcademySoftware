@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --transition-speed: 0.3s;
+  --transition-timing: ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  box-sizing: border-box;
+}
+
+*, *:before, *:after {
+  margin: 0;
+  padding: 0;
+  box-sizing: inherit;
+  transition-duration: var(--transition-speed);
+  transition-timing-function: var(--transition-timing);
+}
+
+/* This targets specific properties that should have transitions */
+.theme-transition {
+  transition-property: background-color, color, border-color, box-shadow, transform, left, width;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+/* Add these styles for the calendar */
+.rbc-calendar {
+  width: 100% !important;
+  border: none !important;
+}
+
+.rbc-header {
+  padding: 8px !important;
+}
+
+/* Style to fix main content area */
+main {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+/* Add this for admin and student dashboard pages that need a fixed layout */
+.dashboard-layout {
+  overflow: hidden;
+}
+
+/* Hide Next.js badge/logo */
+#__next-build-watcher,
+[data-nextjs-dialog-overlay],
+[data-nextjs-dialog],
+[data-nextjs-toast],
+.nextjs-container {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Target any element that might contain "next" in classes or IDs */
+/* Relaxed selector to avoid breaking legitimate components like FullCalendar buttons */
+[class^="next-"],
+[id^="next-"],
+[class*=" __next"],
+[id*=" __next"] {
+  display: none !important;
+}
+
+/* Exception for Next.js root element which is needed */
+#__next {
+  display: block !important;
+}
+
+/* Ensure notifications appear above modals */
+.notistack-SnackbarContainer,
+.SnackbarItem-root,
+.MuiSnackbar-root {
+  z-index: 9999 !important;
+}
+
+/* Ensure notification content appears above everything */
+.notistack-SnackbarContainer .SnackbarContent-root,
+.MuiSnackbar-root .MuiAlert-root,
+.MuiSnackbarContent-root {
+  z-index: 9999 !important;
+}
