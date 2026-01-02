@@ -4,7 +4,7 @@ import "./globals.css";
 import Providers from './providers';
 import Script from 'next/script';
 import ClientLayout from './ClientLayout';
-import NextjsLogoCleaner from './components/NextjsLogoCleaner';
+//import NextjsLogoCleaner from './components/NextjsLogoCleaner';
 
 const inter = Inter({
   subsets: ["latin"],
@@ -21,41 +21,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <head>
         {/* Inline script to remove Next.js logo ASAP */}
-        <script dangerouslySetInnerHTML={{ __html: `
-          (function() {
-            function removeNextjsElements() {
-              var selectors = [
-                '#__next-build-watcher',
-                '[data-nextjs-dialog-overlay]',
-                '[data-nextjs-dialog]',
-                '[data-nextjs-toast]',
-                '.nextjs-container',
-                'div[style*="position: fixed"][style*="bottom: 0"][style*="left: 0"]',
-                'div[style*="position: fixed"][style*="bottom: 0"][style*="right: 0"]'
-              ];
-              
-              selectors.forEach(function(selector) {
-                try {
-                  var elements = document.querySelectorAll(selector);
-                  for (var i = 0; i < elements.length; i++) {
-                    if (elements[i] && elements[i].parentNode) {
-                      elements[i].parentNode.removeChild(elements[i]);
-                    }
-                  }
-                } catch (e) {}
-              });
-            }
-            
-            // Run immediately
-            removeNextjsElements();
-            
-            // Also run after DOM is loaded
-            document.addEventListener('DOMContentLoaded', removeNextjsElements);
-            
-            // And run periodically to catch any dynamically added elements
-            setInterval(removeNextjsElements, 1000);
-          })();
-        `}} />
+
       </head>
       <Script 
         id="theme-script"
@@ -78,9 +44,10 @@ export default function RootLayout({ children }) {
       <body className={`${inter.variable} antialiased`}>
         <Providers>
           <ClientLayout>{children}</ClientLayout>
-          <NextjsLogoCleaner />
+         
         </Providers>
       </body>
     </html>
   );
 }
+

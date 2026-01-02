@@ -31,32 +31,48 @@ import {
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useTheme as useMuiTheme } from '@mui/material/styles';
-import { useTheme } from './contexts/ThemeContext';
+// IMPORTANTE: Dejamos las llamadas aquí, pero las usaremos solo después de mounted.
+import { useTheme } from './contexts/ThemeContext'; 
 import { useLanguage } from './contexts/LanguageContext';
 import ThemeToggle from './components/ThemeToggle';
 import LanguageToggle from './components/LanguageToggle';
 import TimezoneToggle from './components/TimezoneToggle';
 
 export default function LandingPage() {
-  const { theme } = useTheme();
-  const { translations, language } = useLanguage();
   const muiTheme = useMuiTheme();
   const router = useRouter();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   
+  // Estados que dependen de Contextos del Cliente
+  const [themeState, setThemeState] = useState(null);
+  const [languageState, setLanguageState] = useState({ translations: {}, language: 'en' });
+  
+  // Hooks del contexto (deben llamarse SIEMPRE al principio del componente)
+  const themeHook = useTheme();
+  const languageHook = useLanguage();
+  
   // Wait for client-side hydration to complete
   useEffect(() => {
     setMounted(true);
-  }, []);
+    
+    // Llama a los hooks de contexto SOLO en el cliente, cuando el componente monta
+    if (themeHook && languageHook) {
+      setThemeState(themeHook.theme);
+      setLanguageState({
+        translations: languageHook.translations,
+        language: languageHook.language
+      });
+    }
+  }, [themeHook, languageHook]); // Dependencias clave para obtener los valores del contexto
 
-  // If not mounted yet, render a placeholder that exactly matches server-side render
+  // Si no está montado, devuelve un placeholder estático
   if (!mounted) {
     return (
       <Box sx={{ 
         minHeight: '100vh',
-        background: theme?.mode === 'light' ? '#f5f7fa' : '#121212',
+        background: '#f5f7fa', // Valor estático
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center'
@@ -66,6 +82,29 @@ export default function LandingPage() {
     );
   }
   
+  // *** AHORA QUE ESTAMOS MONTADOS Y TENEMOS LOS VALORES DEL CONTEXTO ***
+  // Usamos los estados sincronizados en el useEffect
+  const theme = themeState; 
+  const language = languageState.language;
+  const translations = languageState.translations;
+  // ---------------------------------------------------------------------
+  
+  if (!theme || !translations || !language) {
+    // Esto puede ocurrir si el proveedor de contexto aún no se ha inicializado,
+    // aunque 'mounted' sea true (caso raro si ThemeContext.jsx está bien).
+    return (
+      <Box sx={{ 
+        minHeight: '100vh',
+        background: '#f5f7fa',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <Typography color="error">Initializing context...</Typography>
+      </Box>
+    );
+  }
+
   // Features section data
   const features = [
     {
@@ -385,7 +424,7 @@ export default function LandingPage() {
               color: theme?.palette?.text?.primary || (theme?.mode === 'light' ? '#2D3748' : '#f5f5f5'),
             }}
           >
-            {language === 'en' ? 'Our Features' : 'Nuestras Características'}
+            {language === 'en' ? 'Our Features' : 'Nuestras Caracteristicas'}
           </Typography>
           
           <Grid container spacing={4}>

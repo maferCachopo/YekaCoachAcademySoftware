@@ -3,7 +3,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { lightTheme, darkTheme } from '../theme';
-
+import { Box } from '@mui/material'; // Importar Box para el placeholder
 
 const ThemeContext = createContext();
 
@@ -76,8 +76,12 @@ export function ThemeProvider({ children }) {
     });
   };
   
-  // Don't return null during initialization - always render with a default theme
-  // to prevent the blank screen issue
+  // **CORRECCIÓN DE HIDRATACIÓN AQUÍ:**
+  // Si no está inicializado, renderiza un placeholder estático que coincida
+  // con lo que el servidor envió (asumimos 'light' como valor por defecto del SSR).
+  if (!isInitialized) {
+    return <>{children}</>; 
+  }
   
   return (
     <ThemeContext.Provider value={{ theme, mode, isDark: mode === 'dark', toggleTheme }}>
@@ -89,4 +93,4 @@ export function ThemeProvider({ children }) {
   );
 }
 
-export const useTheme = () => useContext(ThemeContext); 
+export const useTheme = () => useContext(ThemeContext);
