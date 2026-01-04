@@ -221,28 +221,48 @@ const ClassSchedulingForm = memo(({
     setScheduledClasses(initialClasses);
   }, [packageId, existingClasses, setScheduledClasses]);
 
-  // Handle class changes
   const handleChangeClass = useCallback((index, field, value) => {
-    setScheduledClasses(prev => {
-      const updated = [...prev];
+  setScheduledClasses(prev => {
+    const updated = [...prev];
+    
+    // 1. Actualizamos la clase que el usuario está tocando actualmente
+    updated[index] = { 
+      ...updated[index], 
+      [field]: value,
+      timezone: ADMIN_TIMEZONE,
+      teacherId: teacherId || updated[index].teacherId 
+    };
+
+    // 2. Si el usuario está editando la CLASE 1 (index 0), propagamos los valores a las demás
+    if (index === 0) {
+      const firstClass = updated[0];
       
-      // Store the value directly, but with information that this is in admin timezone (ADMIN_TIMEZONE)
-      // This helps ensure consistency when displaying times to international students
-      updated[index] = { ...updated[index], [field]: value };
-      
-      // Add timezone marker to the class to indicate which timezone the values are in
-      updated[index].timezone = ADMIN_TIMEZONE;
-      
-      // Add teacher ID if available
-      if (teacherId && !updated[index].teacherId) {
-        updated[index].teacherId = teacherId;
+      for (let i = 1; i < updated.length; i++) {
+        // Propagar Fecha: Sumamos una semana por cada posición
+        if (firstClass.date) {
+          updated[i].date = moment(firstClass.date).add(i, 'weeks').format('YYYY-MM-DD');
+        }
+        
+        // Propagar Hora de Inicio: Copiamos el valor exacto
+        if (firstClass.startTime) {
+          updated[i].startTime = firstClass.startTime;
+        }
+        
+        // Propagar Hora de Fin: Copiamos el valor exacto
+        if (firstClass.endTime) {
+          updated[i].endTime = firstClass.endTime;
+        }
+
+        // También aseguramos el profesor y la zona horaria
+        updated[i].teacherId = firstClass.teacherId;
+        updated[i].timezone = ADMIN_TIMEZONE;
       }
-      
-      console.log(`DEBUG - Class ${index} ${field} changed to:`, value);
-      console.log(`DEBUG - Updated class data:`, updated[index]);
-      return updated;
-    });
-  }, [setScheduledClasses, teacherId]);
+    }
+    
+    return updated;
+  });
+}, [setScheduledClasses, teacherId]);
+
   
   // Handle adding a class
   const handleAddClass = useCallback(() => {

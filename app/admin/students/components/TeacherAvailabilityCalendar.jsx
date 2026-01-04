@@ -1,27 +1,21 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Box, Typography, CircularProgress, Alert } from '@mui/material';
-import FullCalendar from '@fullcalendar/react';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import interactionPlugin from '@fullcalendar/interaction';
+import { 
+  Box, Typography, CircularProgress, Alert, 
+  Table, TableBody, TableCell, TableContainer, 
+  TableHead, TableRow, Paper, Tooltip 
+} from '@mui/material';
 import moment from 'moment';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
-import { ADMIN_TIMEZONE } from '../../../utils/constants';
-import CalendarButtonFix from './CalendarButtonFix';
 
 /**
- * Calendar component that displays a teacher's schedule and available slots
- * 
- * @param {Object} props
- * @param {Object} props.teacherSchedule - The teacher's schedule data
- * @param {boolean} props.loading - Whether the schedule is loading
- * @param {function} props.onSlotSelect - Callback when an available slot is selected
- * @param {Array} props.scheduledClasses - Currently scheduled classes for the student
- * @param {function} props.onAvailabilityValidation - Callback to provide validation function
+ * Matriz Semanal Recurrente (8 AM - 11 PM)
  */
+const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const HOURS = Array.from({ length: 15 }, (_, i) => i + 8); // Genera [8, 9, ..., 22]
+
 const TeacherAvailabilityCalendar = ({ 
   teacherSchedule, 
   loading, 
@@ -31,405 +25,84 @@ const TeacherAvailabilityCalendar = ({
 }) => {
   const { theme } = useTheme();
   const { translations } = useLanguage();
-  const [events, setEvents] = useState([]);
-  const [availableSlots, setAvailableSlots] = useState([]);
-  const [calendarView, setCalendarView] = useState('timeGridWeek');
 
-  // Validation function to check if a class time is within teacher availability
-  const validateClassTime = useCallback((date, startTime, endTime) => {
-    if (!teacherSchedule || !teacherSchedule.workHours || !date || !startTime || !endTime) {
-      return { valid: false, message: 'Invalid class time or teacher schedule not available' };
-    }
+  // Helper para convertir "HH:mm" a minutos
+  const timeToMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+  };
 
-    // Get the day of the week
-    const dayOfWeek = moment(date).format('dddd').toLowerCase();
-    
-    // Check if teacher works on this day
-    const workingDays = teacherSchedule.workingDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-    if (!workingDays.includes(dayOfWeek)) {
-      return { valid: false, message: `Teacher does not work on ${dayOfWeek}s` };
-    }
-    
-    const workSlots = teacherSchedule.workHours[dayOfWeek];
-    
-    if (!workSlots || !Array.isArray(workSlots)) {
-      return { valid: false, message: `Teacher has no work hours set for ${dayOfWeek}s` };
-    }
+  // Verifica si un bloque específico (Día y Hora) es válido según la disponibilidad del profesor
+  const checkSlotStatus = useCallback((day, hour) => {
+    if (!teacherSchedule) return { type: 'unavailable' };
 
-    // Convert class times to minutes for comparison
-    const classStart = timeToMinutes(startTime);
-    const classEnd = timeToMinutes(endTime);
+    const slotStart = hour * 60;
+    const slotEnd = (hour + 1) * 60;
 
-    // Check if class time falls within any work slot
-    const isWithinWorkHours = workSlots.some(slot => {
-      const workStart = timeToMinutes(slot.start);
-      const workEnd = timeToMinutes(slot.end);
-      return classStart >= workStart && classEnd <= workEnd;
+    // 1. Verificar si el profesor trabaja ese día
+    const workingDays = teacherSchedule.workingDays || [];
+    if (!workingDays.includes(day)) return { type: 'unavailable', label: 'No laborable' };
+
+    // 2. Verificar si está dentro de las Work Hours
+    const dayWorkHours = teacherSchedule.workHours?.[day] || [];
+    const isWithinWork = dayWorkHours.some(w => {
+      return slotStart >= timeToMinutes(w.start) && slotEnd <= timeToMinutes(w.end);
     });
+    if (!isWithinWork) return { type: 'unavailable', label: 'Fuera de horario' };
 
-    if (!isWithinWorkHours) {
-      return { valid: false, message: `Class time is outside teacher's work hours` };
+    // 3. Verificar si cae en Break Hours
+    const dayBreakHours = teacherSchedule.breakHours?.[day] || [];
+    const isInBreak = dayBreakHours.some(b => {
+      const bStart = timeToMinutes(b.start);
+      const bEnd = timeToMinutes(b.end);
+      return (slotStart < bEnd && slotEnd > bStart);
+    });
+    if (isInBreak) return { type: 'break', label: 'Descanso' };
+
+    // 4. Verificar si ya está seleccionado en el formulario actual
+    const isSelected = scheduledClasses.some(cls => {
+      // Nota: Si el formulario usa fechas, esto compara por el nombre del día
+      const clsDay = moment(cls.date).format('dddd').toLowerCase();
+      const clsStart = timeToMinutes(cls.startTime);
+      return clsDay === day && clsStart === slotStart;
+    });
+    if (isSelected) return { type: 'selected', label: 'Seleccionado' };
+
+    return { type: 'available', label: 'Disponible' };
+  }, [teacherSchedule, scheduledClasses]);
+
+  // Validar una clase específica (usado por el componente padre)
+  const validateClassTime = useCallback((date, startTime, endTime) => {
+    if (!teacherSchedule) return { valid: false, message: 'Cargando...' };
+    const day = moment(date).format('dddd').toLowerCase();
+    const hour = parseInt(startTime.split(':')[0]);
+    const status = checkSlotStatus(day, hour);
+    
+    if (status.type === 'available' || status.type === 'selected') {
+      return { valid: true };
     }
+    return { valid: false, message: status.label || 'Horario no disponible' };
+  }, [teacherSchedule, checkSlotStatus]);
 
-    // Check if class overlaps with break hours
-    if (teacherSchedule.breakHours && teacherSchedule.breakHours[dayOfWeek]) {
-      const breakSlots = teacherSchedule.breakHours[dayOfWeek];
-      const overlapsBreak = breakSlots.some(breakSlot => {
-        const breakStart = timeToMinutes(breakSlot.start);
-        const breakEnd = timeToMinutes(breakSlot.end);
-        return (classStart < breakEnd && classEnd > breakStart);
-      });
-
-      if (overlapsBreak) {
-        return { valid: false, message: `Class time overlaps with teacher's break time` };
-      }
-    }
-
-    // Check if class overlaps with existing teacher classes
-    if (teacherSchedule.classes && teacherSchedule.classes.length > 0) {
-      const overlapsExistingClass = teacherSchedule.classes.some(existingClass => {
-        if (existingClass.date !== date) return false;
-        
-        const existingStart = timeToMinutes(existingClass.startTime);
-        const existingEnd = timeToMinutes(existingClass.endTime);
-        return (classStart < existingEnd && classEnd > existingStart);
-      });
-
-      if (overlapsExistingClass) {
-        return { valid: false, message: `Class time conflicts with teacher's existing class` };
-      }
-    }
-
-    return { valid: true, message: 'Class time is valid' };
-  }, [teacherSchedule]);
-
-  // Provide validation function to parent component
   useEffect(() => {
     if (onAvailabilityValidation && teacherSchedule) {
       onAvailabilityValidation(validateClassTime);
     }
   }, [teacherSchedule, onAvailabilityValidation, validateClassTime]);
-  
-  // Process teacher schedule data into calendar events
-  useEffect(() => {
-    if (!teacherSchedule) return;
-    
-    const calendarEvents = [];
-    
-    // Add existing classes as blocked time slots (without showing student details)
-    if (teacherSchedule.classes && teacherSchedule.classes.length > 0) {
-      teacherSchedule.classes.forEach(cls => {
-        if (!cls.date || !cls.startTime || !cls.endTime) return;
-        
-        const startDateTime = `${cls.date}T${cls.startTime}`;
-        const endDateTime = `${cls.date}T${cls.endTime}`;
-        
-        calendarEvents.push({
-          id: `class-${cls.id}`,
-          title: 'Booked', // Don't show student names
-          start: startDateTime,
-          end: endDateTime,
-          display: 'background',
-          backgroundColor: theme.mode === 'light' ? 'rgba(244, 67, 54, 0.2)' : 'rgba(244, 67, 54, 0.3)',
-          extendedProps: {
-            type: 'bookedSlot'
-          }
-        });
+
+  const handleCellClick = (day, hour) => {
+    const status = checkSlotStatus(day, hour);
+    if (status.type === 'available' || status.type === 'selected') {
+      onSlotSelect({
+        day,
+        date: moment().day(day).format('YYYY-MM-DD'), // Fecha de referencia (esta semana)
+        start: `${hour.toString().padStart(2, '0')}:00`,
+        end: `${(hour + 1).toString().padStart(2, '0')}:00`
       });
-    }
-    
-    // Add work hours as background events
-    if (teacherSchedule.workHours) {
-      // Get the current week's dates
-      const today = moment();
-      const startOfWeek = today.clone().startOf('week');
-      
-      Object.entries(teacherSchedule.workHours).forEach(([day, slots]) => {
-        if (!Array.isArray(slots)) return;
-        
-        // Map day string to day number (0 = Sunday, 1 = Monday, etc.)
-        const dayMap = {
-          'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
-          'thursday': 4, 'friday': 5, 'saturday': 6
-        };
-        
-        const dayNumber = dayMap[day.toLowerCase()];
-        if (dayNumber === undefined) return;
-        
-        // Calculate the date for this day in the current week
-        const dayDate = startOfWeek.clone().add(dayNumber, 'days').format('YYYY-MM-DD');
-        
-        slots.forEach((slot, index) => {
-          if (!slot.start || !slot.end) return;
-          
-          const startDateTime = `${dayDate}T${slot.start}`;
-          const endDateTime = `${dayDate}T${slot.end}`;
-          
-          calendarEvents.push({
-            id: `work-${day}-${index}`,
-            title: 'Work Hours',
-            start: startDateTime,
-            end: endDateTime,
-            display: 'background',
-            backgroundColor: theme.mode === 'light' ? 'rgba(33, 150, 243, 0.15)' : 'rgba(33, 150, 243, 0.25)',
-            extendedProps: {
-              type: 'workHours',
-              day
-            }
-          });
-        });
-      });
-    }
-    
-    // Add break hours as background events with different color
-    if (teacherSchedule.breakHours) {
-      const today = moment();
-      const startOfWeek = today.clone().startOf('week');
-      
-      Object.entries(teacherSchedule.breakHours).forEach(([day, slots]) => {
-        if (!Array.isArray(slots)) return;
-        
-        const dayMap = {
-          'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
-          'thursday': 4, 'friday': 5, 'saturday': 6
-        };
-        
-        const dayNumber = dayMap[day.toLowerCase()];
-        if (dayNumber === undefined) return;
-        
-        const dayDate = startOfWeek.clone().add(dayNumber, 'days').format('YYYY-MM-DD');
-        
-        slots.forEach((slot, index) => {
-          if (!slot.start || !slot.end) return;
-          
-          const startDateTime = `${dayDate}T${slot.start}`;
-          const endDateTime = `${dayDate}T${slot.end}`;
-          
-          calendarEvents.push({
-            id: `break-${day}-${index}`,
-            title: 'Break',
-            start: startDateTime,
-            end: endDateTime,
-            display: 'background',
-            backgroundColor: theme.mode === 'light' ? 'rgba(244, 67, 54, 0.15)' : 'rgba(244, 67, 54, 0.25)',
-            extendedProps: {
-              type: 'breakHours',
-              day
-            }
-          });
-        });
-      });
-    }
-    
-    // Add student's scheduled classes as events with a different color
-    if (scheduledClasses && scheduledClasses.length > 0) {
-      scheduledClasses.forEach((cls, index) => {
-        if (!cls.date || !cls.startTime || !cls.endTime) return;
-        
-        const startDateTime = `${cls.date}T${cls.startTime}`;
-        const endDateTime = `${cls.date}T${cls.endTime}`;
-        
-        calendarEvents.push({
-          id: `scheduled-${index}`,
-          title: 'New Class',
-          start: startDateTime,
-          end: endDateTime,
-          backgroundColor: '#9c27b0',
-          borderColor: '#7b1fa2',
-          textColor: '#ffffff',
-          extendedProps: {
-            type: 'scheduledClass',
-            index
-          }
-        });
-      });
-    }
-    
-    setEvents(calendarEvents);
-    
-    // Calculate available slots
-    calculateAvailableSlots(teacherSchedule);
-    
-  }, [teacherSchedule, scheduledClasses, theme.mode]);
-  
-  // Calculate available time slots based on work hours and existing classes
-  const calculateAvailableSlots = (schedule) => {
-    if (!schedule || !schedule.workHours) return;
-    
-    const slots = [];
-    const today = moment().tz(ADMIN_TIMEZONE);
-    const startOfWeek = today.clone().startOf('week');
-    // No end date limitation - allow navigation to any future date
-    const bookedSlots = [];
-    
-    // Collect all booked time slots
-    if (schedule.classes && schedule.classes.length > 0) {
-      schedule.classes.forEach(cls => {
-        if (!cls.date || !cls.startTime || !cls.endTime) return;
-        
-        bookedSlots.push({
-          date: cls.date,
-          start: cls.startTime,
-          end: cls.endTime
-        });
-      });
-    }
-    
-    // Add student's scheduled classes to booked slots
-    if (scheduledClasses && scheduledClasses.length > 0) {
-      scheduledClasses.forEach(cls => {
-        if (!cls.date || !cls.startTime || !cls.endTime) return;
-        
-        bookedSlots.push({
-          date: cls.date,
-          start: cls.startTime,
-          end: cls.endTime
-        });
-      });
-    }
-    
-    // Process work hours for the next 8 weeks (2 months)
-    for (let weekOffset = 0; weekOffset < 8; weekOffset++) {
-      const weekStart = startOfWeek.clone().add(weekOffset, 'weeks');
-      
-      Object.entries(schedule.workHours).forEach(([day, workSlots]) => {
-      if (!Array.isArray(workSlots)) return;
-      
-      // Check if this day is a working day
-      const workingDays = schedule.workingDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
-      if (!workingDays.includes(day.toLowerCase())) return;
-      
-      const dayMap = {
-        'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3,
-        'thursday': 4, 'friday': 5, 'saturday': 6
-      };
-      
-      const dayNumber = dayMap[day.toLowerCase()];
-      if (dayNumber === undefined) return;
-      
-      // Calculate the date for this day in the current week
-      const dayDate = weekStart.clone().add(dayNumber, 'days').format('YYYY-MM-DD');
-      
-      // Skip past dates
-      if (moment.tz(dayDate, ADMIN_TIMEZONE).isBefore(today, 'day')) return;
-      
-      // Get break hours for this day
-      const breakSlots = schedule.breakHours && Array.isArray(schedule.breakHours[day]) 
-        ? schedule.breakHours[day] 
-        : [];
-      
-      workSlots.forEach(workSlot => {
-        if (!workSlot.start || !workSlot.end) return;
-        
-        // Convert times to minutes for easier calculation
-        const workStart = timeToMinutes(workSlot.start);
-        const workEnd = timeToMinutes(workSlot.end);
-        
-        // Create 1-hour slots within work hours
-        for (let slotStart = workStart; slotStart < workEnd; slotStart += 60) {
-          const slotEnd = Math.min(slotStart + 60, workEnd);
-          
-          // Skip if slot is too short
-          if (slotEnd - slotStart < 30) continue;
-          
-          const startTime = minutesToTime(slotStart);
-          const endTime = minutesToTime(slotEnd);
-          
-          // Check if slot overlaps with any break
-          const overlapsBreak = breakSlots.some(breakSlot => {
-            const breakStart = timeToMinutes(breakSlot.start);
-            const breakEnd = timeToMinutes(breakSlot.end);
-            
-            return (slotStart < breakEnd && slotEnd > breakStart);
-          });
-          
-          if (overlapsBreak) continue;
-          
-          // Check if slot overlaps with any booked class
-          const overlapsClass = bookedSlots.some(bookedSlot => {
-            if (bookedSlot.date !== dayDate) return false;
-            
-            const classStart = timeToMinutes(bookedSlot.start);
-            const classEnd = timeToMinutes(bookedSlot.end);
-            
-            return (slotStart < classEnd && slotEnd > classStart);
-          });
-          
-          if (overlapsClass) continue;
-          
-          // This is an available slot
-          slots.push({
-            day,
-            date: dayDate,
-            start: startTime,
-            end: endTime,
-            startDateTime: `${dayDate}T${startTime}`,
-            endDateTime: `${dayDate}T${endTime}`
-          });
-        }
-      });
-    });
-    }
-    
-    setAvailableSlots(slots);
-    
-    // Add available slots to calendar events with clearer visualization
-    const availableEvents = slots.map((slot, index) => ({
-      id: `available-${index}`,
-      title: 'Available',
-      start: slot.startDateTime,
-      end: slot.endDateTime,
-      backgroundColor: theme.mode === 'light' ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.4)',
-      borderColor: '#4caf50',
-      textColor: theme.mode === 'light' ? '#2e7d32' : '#81c784',
-      extendedProps: {
-        type: 'available',
-        slot
-      }
-    }));
-    
-    setEvents(prev => [...prev, ...availableEvents]);
-  };
-  
-  // Helper function to convert time string to minutes
-  const timeToMinutes = (timeStr) => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
-  };
-  
-  // Helper function to convert minutes to time string
-  const minutesToTime = (minutes) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-  };
-  
-  // Handle slot click
-  const handleDateClick = (info) => {
-    // Find if this is an available slot
-    const availableSlot = availableSlots.find(slot => 
-      slot.startDateTime === info.dateStr || 
-      (info.dateStr >= slot.startDateTime && info.dateStr < slot.endDateTime)
-    );
-    
-    if (availableSlot && onSlotSelect) {
-      onSlotSelect(availableSlot);
     }
   };
-  
-  // Handle view change
-  const handleViewChange = (view) => {
-    setCalendarView(view.view.type);
-  };
-  
-  // Handle date range change (when navigating between weeks/months)
-  const handleDatesSet = (dateInfo) => {
-    // When the visible date range changes, recalculate available slots
-    if (teacherSchedule) {
-      calculateAvailableSlots(teacherSchedule);
-    }
-  };
-  
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -437,138 +110,96 @@ const TeacherAvailabilityCalendar = ({
       </Box>
     );
   }
-  
+
   if (!teacherSchedule) {
-    return (
-      <Alert severity="info">
-        {translations.selectTeacherFirst || 'Select a teacher to see their schedule'}
-      </Alert>
-    );
+    return <Alert severity="info">Seleccione un profesor para ver su cronograma.</Alert>;
   }
-  
+
   return (
-    <>
-      <CalendarButtonFix />
-      <Box sx={{ 
-      height: '500px',
-      '& .fc': {
-        fontFamily: 'inherit',
-        '--fc-border-color': theme.mode === 'light' ? '#e0e0e0' : '#424242',
-        '--fc-page-bg-color': theme.mode === 'light' ? '#ffffff' : '#1e1e2d',
-        '--fc-neutral-bg-color': theme.mode === 'light' ? '#f5f5f5' : '#2c2c3a',
-        '--fc-today-bg-color': theme.mode === 'light' ? 'rgba(3, 169, 244, 0.1)' : 'rgba(3, 169, 244, 0.2)',
-        '--fc-event-bg-color': theme.mode === 'light' ? '#4caf50' : '#388e3c',
-        '--fc-event-border-color': theme.mode === 'light' ? '#388e3c' : '#2e7d32',
-        '--fc-event-text-color': '#ffffff',
-        '--fc-event-selected-overlay-color': 'rgba(0, 0, 0, 0.25)',
-        '--fc-more-link-bg-color': theme.mode === 'light' ? '#d0d0d0' : '#424242',
-        '--fc-more-link-text-color': theme.mode === 'light' ? '#212121' : '#ffffff',
-        '--fc-non-business-color': theme.mode === 'light' ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)',
-        '--fc-highlight-color': theme.mode === 'light' ? 'rgba(76, 175, 80, 0.3)' : 'rgba(76, 175, 80, 0.2)',
-        '--fc-button-text-color': theme.mode === 'light' ? '#212121' : '#ffffff',
-        '--fc-button-bg-color': theme.mode === 'light' ? '#f5f5f5' : '#4caf50',
-        '--fc-button-border-color': theme.mode === 'light' ? '#e0e0e0' : '#388e3c',
-        '--fc-button-hover-bg-color': theme.mode === 'light' ? '#e0e0e0' : '#388e3c',
-        '--fc-button-hover-border-color': theme.mode === 'light' ? '#d0d0d0' : '#2e7d32',
-        '--fc-button-active-bg-color': theme.mode === 'light' ? '#d0d0d0' : '#388e3c',
-        '--fc-button-active-border-color': theme.mode === 'light' ? '#bdbdbd' : '#2e7d32',
-      },
-      '& .fc-timegrid-slot': {
-        height: '25px !important'
-      },
-      '& .fc-timegrid-slot-label': {
-        fontSize: '0.75rem'
-      },
-      '& .fc-col-header-cell': {
-        backgroundColor: theme.mode === 'light' ? '#f5f5f5' : '#2c2c3a',
-      },
-      '& .fc-day-today .fc-col-header-cell-cushion': {
-        color: theme.mode === 'light' ? '#1976d2' : '#90caf9',
-        fontWeight: 'bold'
-      },
-      '& .fc-event': {
-        cursor: 'pointer'
-      },
-      '& .fc-event.available-slot': {
-        backgroundColor: theme.mode === 'light' ? '#4caf50' : '#388e3c',
-        borderColor: theme.mode === 'light' ? '#388e3c' : '#2e7d32',
-      },
-      '& .fc-prev-button, & .fc-next-button': {
-        boxShadow: theme.mode === 'light' ? 'none' : '0 0 8px rgba(255,255,255,0.3)',
-        fontSize: '1.1rem',
-        fontWeight: 'bold',
-      }
-    }}>
-      <Typography variant="body2" sx={{ mb: 1, color: theme.text?.secondary }}>
-        {translations.clickAvailableSlot || 'Click on an available slot to schedule a class'}
+    <Box sx={{ width: '100%', mt: 2 }}>
+      <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
+        Cronograma Semanal Recurrente (Bloques de 1 hora)
       </Typography>
-      <FullCalendar
-        plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
-        initialView="timeGridWeek"
-        headerToolbar={{
-          left: 'prev,next today',
-          center: 'title',
-          right: 'timeGridWeek,timeGridDay'
-        }}
-        buttonText={{
-          today: 'Today',
-          week: 'Week',
-          day: 'Day'
-        }}
-        slotMinTime="08:00:00"
-        slotMaxTime="22:00:00"
-        allDaySlot={false}
-        height="100%"
-        events={events}
-        dateClick={handleDateClick}
-        viewDidMount={handleViewChange}
-        datesSet={handleDatesSet}
-        nowIndicator={true}
-        navLinks={true} // Enable clicking on day/week names
-        editable={false}
-        selectable={false} // Disable date range selection
-        selectMirror={false}
-        dayMaxEvents={true} // Allow "more" link when too many events
-        fixedWeekCount={false} // Allow variable number of weeks
-        showNonCurrentDates={true} // Show dates from other months
-        timeZone={ADMIN_TIMEZONE} // Ensure all times are in admin timezone
-        slotLabelFormat={{
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: false
-        }}
-        eventClassNames={(arg) => {
-          // Add special class for available slots
-          if (arg.event.extendedProps?.type === 'available') {
-            return ['available-slot'];
-          }
-          return [];
-        }}
-        eventContent={(eventInfo) => {
-          // Only render content for available slots
-          if (eventInfo.event.extendedProps?.type === 'available') {
-            return (
-              <Box sx={{ 
-                fontSize: '0.75rem', 
-                lineHeight: 1.2,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                width: '100%',
-                p: 0.5,
-                textAlign: 'center',
-                fontWeight: 'bold'
-              }}>
-                Available
-              </Box>
-            );
-          }
-          return null;
-        }}
-      />
+      
+      <TableContainer component={Paper} sx={{ 
+        maxHeight: 500, 
+        border: `1px solid ${theme.palette.divider}`,
+        '&::-webkit-scrollbar': { width: 8 },
+        '&::-webkit-scrollbar-thumb': { backgroundColor: '#ccc', borderRadius: 4 }
+      }}>
+        <Table stickyHeader size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ bgcolor: theme.palette.background.default, fontWeight: 'bold' }}>Hora</TableCell>
+              {DAYS.map(day => (
+                <TableCell key={day} align="center" sx={{ 
+                  bgcolor: theme.palette.background.default, 
+                  fontWeight: 'bold', 
+                  textTransform: 'capitalize',
+                  minWidth: 80
+                }}>
+                  {translations[day]?.substring(0, 3) || day.substring(0, 3)}
+                </TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {HOURS.map(hour => (
+              <TableRow key={hour}>
+                <TableCell sx={{ fontWeight: '500', borderRight: `1px solid ${theme.palette.divider}` }}>
+                  {`${hour}:00`}
+                </TableCell>
+                {DAYS.map(day => {
+                  const status = checkSlotStatus(day, hour);
+                  const isSelectable = status.type === 'available' || status.type === 'selected';
+
+                  return (
+                    <Tooltip key={day} title={`${day} - ${hour}:00 (${status.label})`} arrow>
+                      <TableCell 
+                        align="center"
+                        onClick={() => handleCellClick(day, hour)}
+                        sx={{ 
+                          cursor: isSelectable ? 'pointer' : 'not-allowed',
+                          bgcolor: 
+                            status.type === 'selected' ? '#845EC2' : 
+                            status.type === 'available' ? 'rgba(76, 175, 80, 0.2)' : 
+                            status.type === 'break' ? 'rgba(255, 152, 0, 0.2)' : 
+                            'rgba(0, 0, 0, 0.05)',
+                          color: status.type === 'selected' ? 'white' : 'inherit',
+                          border: `1px solid ${theme.palette.divider}`,
+                          transition: '0.2s',
+                          '&:hover': {
+                            bgcolor: isSelectable ? (status.type === 'selected' ? '#6B46C1' : 'rgba(76, 175, 80, 0.4)') : 'inherit'
+                          }
+                        }}
+                      >
+                        {status.type === 'selected' ? '✓' : ''}
+                      </TableCell>
+                    </Tooltip>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Leyenda */}
+      <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+        <LegendItem color="rgba(76, 175, 80, 0.2)" label="Disponible" />
+        <LegendItem color="#845EC2" label="Seleccionado" />
+        <LegendItem color="rgba(255, 152, 0, 0.2)" label="Descanso" />
+        <LegendItem color="rgba(0, 0, 0, 0.05)" label="No disponible" />
+      </Box>
     </Box>
-    </>
   );
 };
+
+const LegendItem = ({ color, label }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+    <Box sx={{ width: 16, height: 16, bgcolor: color, border: '1px solid #ddd', borderRadius: 0.5 }} />
+    <Typography variant="caption">{label}</Typography>
+  </Box>
+);
 
 export default TeacherAvailabilityCalendar;

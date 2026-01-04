@@ -1031,10 +1031,13 @@ router.get('/:id/students', verifyToken, hasRole(['admin', 'coordinator', 'teach
   }
 });
 
-// Assign student to teacher
+/**
+ * MODIFICADA: Asignar estudiante a profesor
+ * Soporta la recepción de weeklySchedule para el cronograma permanente
+ */
 router.post('/:id/students', verifyToken, hasRole(['admin']), async (req, res) => {
   try {
-    const { studentId, notes } = req.body;
+    const { studentId, notes, weeklySchedule } = req.body;
     const teacherId = req.params.id;
     
     if (!studentId) {
@@ -1061,7 +1064,6 @@ router.post('/:id/students', verifyToken, hasRole(['admin']), async (req, res) =
     });
 
     if (existingAssignment) {
-      // Get the teacher's name for a more informative error message
       const existingTeacher = await Teacher.findByPk(existingAssignment.teacherId);
       const teacherName = existingTeacher ? 
         `${existingTeacher.firstName} ${existingTeacher.lastName}` : 
@@ -1084,7 +1086,11 @@ router.post('/:id/students', verifyToken, hasRole(['admin']), async (req, res) =
     });
 
     if (existingTeacherAssignment) {
-      return res.status(400).json({ error: 'Student is already assigned to this teacher' });
+      // Update the existing active assignment if new weeklySchedule is provided
+      if (weeklySchedule) {
+        await existingTeacherAssignment.update({ weeklySchedule });
+      }
+      return res.status(200).json(existingTeacherAssignment);
     }
 
     // Check if there's an inactive assignment for this student-teacher pair
@@ -1097,30 +1103,31 @@ router.post('/:id/students', verifyToken, hasRole(['admin']), async (req, res) =
     });
 
     if (inactiveAssignment) {
-      // Reactivate the existing assignment instead of creating a new one
+      // Reactivate the existing assignment and update schedule
       await inactiveAssignment.update({
         active: true,
         assignedDate: new Date(),
-        notes: notes || inactiveAssignment.notes
+        notes: notes || inactiveAssignment.notes,
+        weeklySchedule: weeklySchedule || inactiveAssignment.weeklySchedule
       });
       
       return res.status(200).json(inactiveAssignment);
     }
 
-    // Create new assignment
+    // Create new assignment with weeklySchedule
     const assignment = await TeacherStudent.create({
       teacherId,
       studentId,
       notes,
       assignedDate: new Date(),
-      active: true
+      active: true,
+      weeklySchedule: weeklySchedule || []
     });
 
     res.status(201).json(assignment);
   } catch (error) {
     console.error('Error assigning student to teacher:', error);
     
-    // Handle unique constraint errors more gracefully
     if (error.name === 'SequelizeUniqueConstraintError') {
       return res.status(400).json({ 
         error: 'Student already has a relationship with this teacher. Try removing the student first and then adding them again.' 
@@ -2526,4 +2533,4 @@ router.get('/available-slots', verifyToken, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

@@ -1,3 +1,4 @@
+// server/models/teacherStudent.js
 module.exports = (sequelize, DataTypes) => {
   const TeacherStudent = sequelize.define('TeacherStudent', {
     id: {
@@ -30,12 +31,22 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
+    /**
+     * weeklySchedule guardará los slots fijos del estudiante.
+     * Estructura esperada: [{ "day": "monday", "hour": 10 }, { "day": "friday", "hour": 15 }]
+     */
+    weeklySchedule: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: []
+    },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
     }
   }, {
     timestamps: true,
+    tableName: 'TeacherStudents', // Aseguramos el nombre de la tabla
     indexes: [
       {
         unique: true,
@@ -46,4 +57,4 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   return TeacherStudent;
-}; 
+};
