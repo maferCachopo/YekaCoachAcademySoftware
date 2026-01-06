@@ -1,34 +1,31 @@
 'use client';
-import { Box, CircularProgress, Typography, Button, Fade } from '@mui/material';
+import { Box, CircularProgress, Typography, Button } from '@mui/material';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useState, useEffect } from 'react';
 
 export default function Loading({ message, error, onRetry, onContinue, fullPage = true, showOverlay = true }) {
   const themeContext = useTheme();
-  const theme = themeContext?.theme || {};
   const isDark = themeContext?.isDark || false;
+  const theme = themeContext?.theme || {};
   
   const languageContext = useLanguage();
   const translations = languageContext?.translations || {};
+  
   const [loadingTime, setLoadingTime] = useState(0);
   
-  // Initialize visible to true to avoid hydration mismatch
-  const [visible, setVisible] = useState(true);
+  // Solución de hidratación: Usamos un estado para saber si estamos en el cliente
+  const [mounted, setMounted] = useState(false);
   
   useEffect(() => {
-    // Track how long we've been loading
+    setMounted(true);
     if (!error) {
       const interval = setInterval(() => {
         setLoadingTime(prev => prev + 1);
       }, 1000);
-      
       return () => clearInterval(interval);
     }
   }, [error]);
-  
-  // Show server connection warning after 5 seconds of loading
-  const showConnectionWarning = loadingTime > 5 && !error;
   
   const containerStyles = fullPage ? {
     display: 'flex',
@@ -53,6 +50,10 @@ export default function Loading({ message, error, onRetry, onContinue, fullPage 
     minHeight: 200,
     backgroundColor: 'transparent'
   };
+
+  // Renderizado seguro para hidratación
+  // Si estamos en el servidor (mounted es false), mostramos una estructura simple o el loader genérico
+  // que coincida con lo que el cliente espera inicialmente.
   
   return (
     <Box sx={containerStyles}>
@@ -75,61 +76,22 @@ export default function Loading({ message, error, onRetry, onContinue, fullPage 
             !
           </Box>
           
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              color: isDark ? '#fff' : '#212B36',
-              fontWeight: 600,
-              textAlign: 'center',
-              mb: 2,
-              px: 2
-            }}
-          >
+          <Typography variant="h5" sx={{ color: isDark ? '#fff' : '#212B36', fontWeight: 600, textAlign: 'center', mb: 2 }}>
             {translations.serverError || 'Server Error'}
           </Typography>
           
-          <Typography 
-            variant="body1" 
-            sx={{ 
-              color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
-              textAlign: 'center',
-              mb: 4,
-              maxWidth: 500,
-              px: 2
-            }}
-          >
+          <Typography variant="body1" sx={{ color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)', textAlign: 'center', mb: 4, maxWidth: 500 }}>
             {error.message || translations.serverConnectionError || 'Unable to connect to the server. Please try again.'}
           </Typography>
           
           <Box sx={{ display: 'flex', gap: 2 }}>
             {onRetry && (
-              <Button 
-                variant="contained"
-                onClick={onRetry}
-                sx={{
-                  bgcolor: theme?.palette?.primary?.main || '#845EC2',
-                  color: '#fff',
-                  '&:hover': {
-                    bgcolor: theme?.palette?.primary?.dark || '#6A3FAE',
-                  },
-                }}
-              >
+              <Button variant="contained" onClick={onRetry} sx={{ bgcolor: theme?.palette?.primary?.main }}>
                 {translations.retry || 'Retry'}
               </Button>
             )}
-            
             {onContinue && (
-              <Button 
-                variant="outlined"
-                onClick={onContinue}
-                sx={{
-                  color: isDark ? '#fff' : '#212B36',
-                  borderColor: theme?.palette?.warning?.main || '#ff9800',
-                  '&:hover': {
-                    bgcolor: 'rgba(255, 152, 0, 0.08)',
-                  },
-                }}
-              >
+              <Button variant="outlined" onClick={onContinue} sx={{ color: isDark ? '#fff' : '#212B36', borderColor: theme?.palette?.warning?.main }}>
                 {translations.continueWithoutServer || 'Continue without server'}
               </Button>
             )}
@@ -138,29 +100,14 @@ export default function Loading({ message, error, onRetry, onContinue, fullPage 
       ) : (
         // Loading state
         <>
-          <CircularProgress 
-            size={fullPage ? 60 : 40} 
-            thickness={4}
-            sx={{ 
-              color: theme?.palette?.primary?.main || '#845EC2',
-              mb: 3
-            }} 
-          />
+          <CircularProgress size={fullPage ? 60 : 40} thickness={4} sx={{ color: theme?.palette?.primary?.main || '#845EC2', mb: 3 }} />
           
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              color: isDark ? '#fff' : '#212B36',
-              fontWeight: 500,
-              textAlign: 'center',
-              maxWidth: 400,
-              px: 2
-            }}
-          >
-            {typeof window !== 'undefined' ? (message || translations.loading || 'Loading...') : 'Initializing application...'}
+          <Typography variant="h6" sx={{ color: isDark ? '#fff' : '#212B36', fontWeight: 500, textAlign: 'center' }}>
+             {/* Usamos el prop message directamente para asegurar coincidencia servidor/cliente */}
+             {message || translations.loading || 'Loading...'}
           </Typography>
         </>
       )}
     </Box>
   );
-} 
+}

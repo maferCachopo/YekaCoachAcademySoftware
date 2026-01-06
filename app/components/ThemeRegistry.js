@@ -1,19 +1,16 @@
 'use client';
+import React, { useState } from 'react';
 import createCache from '@emotion/cache';
 import { useServerInsertedHTML } from 'next/navigation';
 import { CacheProvider } from '@emotion/react';
-import { ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import theme from '../theme';
-import { useState, useEffect } from 'react';
 
-// This implementation is from emotion-js
-// https://github.com/emotion-js/emotion/issues/2928#issuecomment-1319747902
+// Esta implementación maneja la inserción de estilos de Emotion en el servidor
+// para evitar errores de hidratación con Material UI en Next.js App Router
 export default function ThemeRegistry({ children }) {
   const [{ cache, flush }] = useState(() => {
     const cache = createCache({
       key: 'mui',
-      prepend: true, // This ensures MUI styles are loaded first
+      prepend: true, // Asegura que los estilos de MUI se carguen primero
     });
 
     cache.compat = true;
@@ -38,13 +35,6 @@ export default function ThemeRegistry({ children }) {
     return { cache, flush };
   });
 
-  // Add client-side check to prevent hydration mismatch
-  const [mounted, setMounted] = useState(false);
-  
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   useServerInsertedHTML(() => {
     const names = flush();
     if (names.length === 0) {
@@ -52,7 +42,6 @@ export default function ThemeRegistry({ children }) {
     }
 
     let styles = '';
-    // Collect all styles for the names
     for (const name of names) {
       styles += cache.inserted[name];
     }
@@ -70,11 +59,7 @@ export default function ThemeRegistry({ children }) {
 
   return (
     <CacheProvider value={cache}>
-      <ThemeProvider theme={theme}>
-        {/* Only render CssBaseline on the client to avoid hydration mismatch */}
-        {mounted ? <CssBaseline /> : null}
-        {children}
-      </ThemeProvider>
+      {children}
     </CacheProvider>
   );
-} 
+}

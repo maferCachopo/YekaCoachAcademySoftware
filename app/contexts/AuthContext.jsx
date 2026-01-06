@@ -32,10 +32,18 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState(null);
+  // Nuevo estado para controlar la hidratación
+  const [isMounted, setIsMounted] = useState(false);
+  
   const router = useRouter();
   const pathname = usePathname();
   const notify = useNotify();
   const { translations } = useLanguage();
+
+  // Efecto para marcar cuando el componente se ha montado en el cliente
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Load user from storage on initial load
   useEffect(() => {
@@ -330,11 +338,15 @@ export function AuthProvider({ children }) {
   const isLoginPage = pathname === '/login';
   const isInternalLoginPage = pathname === '/internal-login';
   
-  // Only show the loading component during the application's initial loading
-  // And don't show it on the landing page or login pages to prevent flickering
-  // Add a check for window to ensure this only runs on client-side
-  if (initializing && !isLoginPage && !isLandingPage && !isInternalLoginPage && typeof window !== 'undefined') {
-    // Use a consistent message on both client and server to avoid hydration issues
+  // SOLUCIÓN AL ERROR DE HIDRATACIÓN:
+  // Solo mostramos el componente de carga si:
+  // 1. isMounted es true (estamos en el cliente después del primer render)
+  // 2. initializing es true (aún estamos cargando usuario)
+  // 3. NO estamos en páginas públicas
+  // 
+  // Esto asegura que durante el SSR y el primer render del cliente, se renderice {children}
+  // (que contiene ClientLayout -> "Connecting to server..."), evitando el desajuste de HTML.
+  if (isMounted && initializing && !isLoginPage && !isLandingPage && !isInternalLoginPage) {
     return <Loading message="Initializing application..." />;
   }
 
@@ -345,4 +357,4 @@ export function AuthProvider({ children }) {
   );
 }
 
-export default AuthContext; 
+export default AuthContext;

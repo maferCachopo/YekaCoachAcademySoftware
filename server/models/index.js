@@ -12,7 +12,6 @@ const sequelize = new Sequelize({
 // Initialize an empty db object
 const db = {};
 
-// Add sequelize instances to db object
 db.Sequelize = Sequelize;
 db.sequelize = sequelize;
 
@@ -33,7 +32,7 @@ db.ExamQuestion = require('./examQuestion')(sequelize, Sequelize.DataTypes);
 db.ExamAnswer = require('./examAnswer')(sequelize, Sequelize.DataTypes);
 db.ExamAssignment = require('./examAssignment')(sequelize, Sequelize.DataTypes);
 
-// Define relationships
+// --- Define relationships ---
 
 // Student belongs to User
 db.Student.belongsTo(db.User, {
@@ -93,24 +92,21 @@ db.StudentClass.belongsTo(db.Class, {
   as: 'classDetail'
 });
 
-// Add the proper associations after all models are loaded
+// Proper associations for student packages and classes
 db.StudentClass.belongsTo(db.StudentPackage, { foreignKey: 'studentPackageId', as: 'studentPackage' });
 db.StudentPackage.hasMany(db.StudentClass, { foreignKey: 'studentPackageId', as: 'studentClasses' });
 
-// Fix the duplicate 'class' alias by changing one to 'classDetail'
+// Fix duplicate alias for Class
 db.Class.hasMany(db.StudentClass, { foreignKey: 'classId', as: 'studentClasses' });
 
 // RescheduleClass relationships
-// Class has many RescheduleClass records as oldClass
 db.Class.hasMany(db.RescheduleClass, { foreignKey: 'oldClassId', as: 'oldReschedulings' });
-// Class has many RescheduleClass records as newClass
 db.Class.hasMany(db.RescheduleClass, { foreignKey: 'newClassId', as: 'newReschedulings' });
-// Student has many RescheduleClass records
 db.Student.hasMany(db.RescheduleClass, { foreignKey: 'studentId', as: 'reschedulings' });
-// StudentPackage has many RescheduleClass records
 db.StudentPackage.hasMany(db.RescheduleClass, { foreignKey: 'studentPackageId', as: 'reschedulings' });
 
-// Teacher-Student relationships
+// --- Teacher-Student Relationships (MODIFICADO) ---
+// Definimos la relación muchos a muchos
 db.Teacher.belongsToMany(db.Student, {
   through: db.TeacherStudent,
   foreignKey: 'teacherId',
@@ -125,6 +121,13 @@ db.Student.belongsToMany(db.Teacher, {
   as: 'teachers'
 });
 
+// IMPORTANTE: Definimos las relaciones directas con la tabla pivot para poder consultar
+// el campo weeklySchedule de forma individual o mediante includes directos.
+db.Teacher.hasMany(db.TeacherStudent, { foreignKey: 'teacherId', as: 'TeacherAssignments' });
+db.Student.hasMany(db.TeacherStudent, { foreignKey: 'studentId', as: 'TeacherAssignments' });
+db.TeacherStudent.belongsTo(db.Teacher, { foreignKey: 'teacherId', as: 'teacher' });
+db.TeacherStudent.belongsTo(db.Student, { foreignKey: 'studentId', as: 'student' });
+
 // Teacher-Activity relationships
 db.Teacher.hasMany(db.TeacherActivity, {
   foreignKey: 'teacherId',
@@ -136,7 +139,7 @@ db.TeacherActivity.belongsTo(db.Teacher, {
   as: 'teacher'
 });
 
-// Class can be associated with a teacher
+// Class associated with a teacher
 db.Class.belongsTo(db.Teacher, {
   foreignKey: 'teacherId',
   as: 'teacher'
@@ -147,20 +150,20 @@ db.Teacher.hasMany(db.Class, {
   as: 'classes'
 });
 
-// Set up associations for Exam and ExamQuestion models
+// Exam associations
 db.Exam.hasMany(db.ExamQuestion, { foreignKey: 'examId', as: 'questions' });
 db.ExamQuestion.belongsTo(db.Exam, { foreignKey: 'examId', as: 'examDetails' });
 
-// Set up associations for ExamAnswer model
+// ExamAnswer associations
 db.ExamQuestion.hasMany(db.ExamAnswer, { foreignKey: 'questionId', as: 'answers' });
 db.Exam.hasMany(db.ExamAnswer, { foreignKey: 'examId', as: 'answers' });
 db.Teacher.hasMany(db.ExamAnswer, { foreignKey: 'teacherId', as: 'examAnswers' });
 
-// Associate all models
+// Associate all models that have an associate function
 Object.keys(db).forEach(modelName => {
   if (db[modelName].associate) {
     db[modelName].associate(db);
   }
 });
 
-module.exports = db; 
+module.exports = db;
