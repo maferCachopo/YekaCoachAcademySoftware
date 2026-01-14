@@ -861,28 +861,32 @@ router.delete('/:id', verifyToken, hasRole(['admin']), async (req, res) => {
 });
 
 // Get teacher's schedule
+// server/routes/teachers.js
+
 router.get('/:id/schedule', verifyToken, hasRole(['admin', 'coordinator', 'teacher']), async (req, res) => {
   try {
     const teacherId = req.params.id;
     const teacher = await Teacher.findByPk(teacherId);
-    const { startDate, endDate } = req.query;
+    
+    // Estos parámetros siguen siendo útiles para ver clases específicas (historial o excepciones)
+    const { startDate, endDate } = req.query; 
     
     if (!teacher) {
       return res.status(404).json({ error: 'Teacher not found' });
     }
 
-    // If teacher is requesting their own schedule or admin/coordinator
+    // Validación de permisos
     if (req.user.role === 'teacher' && req.user.id !== teacher.userId) {
       return res.status(403).json({ error: 'Unauthorized access' });
     }
     
-    // Get the user's preferred timezone (if available)
+    // Obtener zona horaria del usuario
     let userTimezone = timezoneUtils.ADMIN_TIMEZONE;
     if (req.user && req.user.timezone) {
       userTimezone = req.user.timezone;
     }
 
-    // Return work hours, break hours, and working days
+    // 1. Estructura base de la respuesta
     const scheduleData = {
       teacher: {
         id: teacher.id,
@@ -892,11 +896,56 @@ router.get('/:id/schedule', verifyToken, hasRole(['admin', 'coordinator', 'teach
       workHours: teacher.workHours,
       breakHours: teacher.breakHours,
       workingDays: teacher.workingDays,
+      assignedStudents: [], // Aquí irá el cronograma fijo (Día de la semana)
       activities: [],
-      classes: []
+      classes: [] // Aquí irán las clases específicas (Fechas)
     };
+
+    // -----------------------------------------------------------------------
+    // 2. NUEVA LÓGICA: Cronograma Fijo (Días de la semana)
+    // -----------------------------------------------------------------------
+    const studentsWithSchedule = await Student.findAll({
+      attributes: ['id', 'name', 'surname'],
+      include: [{
+        model: Teacher,
+        as: 'teachers',
+        where: { id: teacher.id },
+        through: {
+          attributes: ['weeklySchedule'], 
+          where: { active: true }
+        }
+      }]
+    });
+
+    // Mapeamos para limpiar la respuesta y extraer el JSON del horario fijo
+    scheduleData.assignedStudents = studentsWithSchedule.map(student => {
+      // Sequelize guarda los datos de la tabla intermedia en student.teachers[0].TeacherStudent
+      const pivot = student.teachers && student.teachers.length > 0 ? student.teachers[0].TeacherStudent : null;
+      
+      // Parseamos el horario si viene como texto
+      let schedule = [];
+      if (pivot && pivot.weeklySchedule) {
+        try {
+          schedule = typeof pivot.weeklySchedule === 'string' 
+            ? JSON.parse(pivot.weeklySchedule) 
+            : pivot.weeklySchedule;
+        } catch (e) {
+          schedule = [];
+        }
+      }
+
+      return {
+        id: student.id,
+        fullName: `${student.name} ${student.surname}`,
+        fixedSchedule: schedule // Ejemplo: [{ day: 'monday', hour: 13 }]
+      };
+    });
+
+    // -----------------------------------------------------------------------
+    // 3. LÓGICA EXISTENTE: Clases Específicas (Calendario/Fechas)
+    // -----------------------------------------------------------------------
     
-    // Build date filter for both activities and classes
+    // Construir filtro de fechas
     const dateFilter = {};
     if (startDate && endDate) {
       dateFilter[Op.between] = [startDate, endDate];
@@ -906,7 +955,7 @@ router.get('/:id/schedule', verifyToken, hasRole(['admin', 'coordinator', 'teach
       dateFilter[Op.lte] = endDate;
     }
     
-    // Get teacher's activities
+    // Buscar Actividades del profesor
     const activities = await TeacherActivity.findAll({
       where: {
         teacherId: teacher.id,
@@ -915,7 +964,6 @@ router.get('/:id/schedule', verifyToken, hasRole(['admin', 'coordinator', 'teach
       order: [['date', 'ASC'], ['startTime', 'ASC']]
     });
     
-    // Convert times to user's timezone
     scheduleData.activities = activities.map(activity => {
       const userTime = timezoneUtils.convertFromAdminToUserTimezone(
         activity.date,
@@ -930,10 +978,10 @@ router.get('/:id/schedule', verifyToken, hasRole(['admin', 'coordinator', 'teach
       };
     });
     
-    // Get classes where this teacher is assigned
+    // Buscar Clases específicas programadas
     const classesWithStudents = await Class.findAll({
       where: { 
-        teacherId,
+        teacherId: teacher.id,
         ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {})
       },
       include: [{
@@ -950,14 +998,11 @@ router.get('/:id/schedule', verifyToken, hasRole(['admin', 'coordinator', 'teach
       order: [['date', 'ASC'], ['startTime', 'ASC']]
     });
     
-    // Process each class to extract student information
     scheduleData.classes = classesWithStudents.map(cls => {
       const classData = cls.toJSON();
       
-      // Get the first student (assuming one class has one student)
       const student = classData.students && classData.students.length > 0 ? classData.students[0] : null;
       
-      // Convert times to user's timezone if needed
       const classTimezone = classData.timezone || timezoneUtils.ADMIN_TIMEZONE;
       const userClassTime = timezoneUtils.convertTimezoneSafe(
         classData.date,
@@ -968,14 +1013,11 @@ router.get('/:id/schedule', verifyToken, hasRole(['admin', 'coordinator', 'teach
       
       return {
         ...classData,
-        // Add student information
         studentId: student ? student.id : null,
         studentName: student ? student.name : null,
         studentSurname: student ? student.surname : null,
-        // Time in user's timezone
         userDate: userClassTime.date,
         userStartTime: userClassTime.time,
-        // Remove nested students array to avoid duplication
         students: undefined
       };
     });

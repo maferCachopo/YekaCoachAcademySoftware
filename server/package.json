@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "dev:full": "concurrently \"set PORT=3000 && next dev\" \"set PORT=3001 && node server/server.js\"",
     "start:3001": "set PORT=3001 && node server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "migrate": "sequelize-cli db:migrate",
