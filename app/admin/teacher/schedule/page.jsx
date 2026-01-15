@@ -83,17 +83,18 @@ export default function TeacherSchedule() {
 
     // --- 1. BUSCAR ASIGNACIÓN PERMANENTE (Fixed Slots del Estudiante) ---
     // Buscamos si algún estudiante asignado tiene este día/hora en su 'weeklySchedule'
-    const permanentStudent = teacherData.assignedStudents?.find(student => 
-      student.TeacherStudent?.weeklySchedule?.some(slot => 
-        slot.day === dayName && slot.hour === hour
+     const permanentStudent = teacherData.assignedStudents?.find(student => 
+      student.fixedSchedule?.some(slot => 
+        slot.day.toLowerCase() === dayName.toLowerCase() && 
+        parseInt(slot.hour) === hour
       )
     );
 
     if (permanentStudent) {
       return { 
-        type: 'fixed', 
-        label: `Asignación Fija: ${permanentStudent.name} ${permanentStudent.surname}`, 
-        data: { name: `${permanentStudent.name} ${permanentStudent.surname}` } 
+         type: 'fixed', 
+        label: `Asignación Fija: ${permanentStudent.fullName}`, 
+        data: { name: permanentStudent.fullName }  
       };
     }
 
