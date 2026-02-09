@@ -50,6 +50,7 @@ export default function RootLayout({ children }) {
             <NextjsLogoCleaner />
           </Providers>
         </ThemeRegistry>
+        
       </body>
     </html>
   );

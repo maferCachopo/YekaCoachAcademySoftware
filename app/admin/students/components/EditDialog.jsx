@@ -335,30 +335,24 @@ const EditDialog = ({
       // Only validate classes if we're not resetting the package
       if (formData.package && !isResetPackage) {
         // Find the package in the packages array
-        const selectedPackage = packages.find(pkg => pkg.id === formData.package);
-        
-        if (selectedPackage) {
-          // Get the total classes required by the package
-          const requiredClasses = selectedPackage.totalClasses;
-          
-          // Count valid scheduled classes (with date, start time, and end time)
-          const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime);
-          
-          // For existing packages, we should only allow modification of existing classes, not adding new ones
-          // unless the current scheduled classes count is less than the package requirements
-          const existingClassesCount = existingClasses.length;
-          const newClassesCount = scheduledClasses.filter(cls => !cls.classId).length;
-          
-          // Allow new classes only if we have fewer than required classes
-          if (existingClassesCount + newClassesCount > requiredClasses) {
-            setMessage({
-              open: true,
-              text: translations.cannotAddExtraClasses || `Cannot add extra classes. Package allows ${requiredClasses} classes maximum.`,
-              severity: 'error'
-            });
-            setLoading(false);
-            return;
-          }
+         const selectedPackage = packages.find(pkg => pkg.id === formData.package);
+  
+          if (selectedPackage) {
+            const requiredClasses = selectedPackage.totalClasses;
+            
+            // Filtramos las clases que están REALMENTE llenas (tienen fecha, inicio y fin)
+            const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime);
+
+            // VALIDACIÓN CRÍTICA:
+            if (validClasses.length < requiredClasses) {
+              setMessage({
+                open: true,
+                text: `Error: Debes programar las ${requiredClasses} clases completas antes de guardar. Solo has llenado ${validClasses.length}.`,
+                severity: 'error'
+              });
+              setLoading(false);
+              return; // Detiene el guardado
+            }
 
           // If a teacher is selected, validate that all classes are within teacher availability
           if (selectedTeacher && teacherValidationFn) {

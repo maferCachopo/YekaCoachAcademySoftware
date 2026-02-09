@@ -141,39 +141,45 @@ const ClassSchedulingForm = memo(({
     setScheduledClasses(initialClasses);
   }, [packageId, existingClasses, setScheduledClasses]);
 
-  const handleChangeClass = useCallback((index, field, value) => {
-    setScheduledClasses(prev => {
-      const updated = [...prev];
-      updated[index] = { 
-        ...updated[index], 
-        [field]: value,
-        timezone: ADMIN_TIMEZONE,
-        teacherId: teacherId || updated[index].teacherId 
-      };
+  //automatizar el añadir las clases a partir de la primera clase 
 
-      if (index === 0) {
-        const firstClass = updated[0];
+const handleChangeClass = useCallback((index, field, value) => {
+  setScheduledClasses(prev => {
+    const updated = [...prev];
+    
+    // Actualizar el valor actual
+    updated[index] = { 
+      ...updated[index], 
+      [field]: value,
+      timezone: ADMIN_TIMEZONE,
+      teacherId: teacherId || updated[index].teacherId 
+    };
+
+    // --- AUTOMATIZACIÓN ---
+    // Si estamos editando la CLASE 1 (index 0) y cambiamos Fecha u Hora
+    if (index === 0 && (field === 'date' || field === 'startTime' || field === 'endTime')) {
+      const firstClass = updated[0];
+      
+      // Solo propagar si la primera clase tiene los datos mínimos
+      if (firstClass.date && firstClass.startTime) {
         for (let i = 1; i < updated.length; i++) {
-          if (firstClass.date) {
-            updated[i].date = moment(firstClass.date).add(i, 'weeks').format('YYYY-MM-DD');
-          }
-          if (firstClass.startTime) updated[i].startTime = firstClass.startTime;
-          if (firstClass.endTime) updated[i].endTime = firstClass.endTime;
-          updated[i].teacherId = firstClass.teacherId;
+          // Sumar i semanas a la fecha de la clase 1
+          updated[i].date = moment(firstClass.date).add(i, 'weeks').format('YYYY-MM-DD');
+          updated[i].startTime = firstClass.startTime;
+          // Si no hay endTime, se asume 1 hora después o el mismo que la clase 1
+          updated[i].endTime = firstClass.endTime || moment(firstClass.startTime, 'HH:mm').add(1, 'hour').format('HH:mm');
+          updated[i].teacherId = firstClass.teacherId || teacherId;
           updated[i].timezone = ADMIN_TIMEZONE;
         }
       }
-      
-      // --- MODIFICACIÓN: Inyectamos el weeklySchedule dentro del objeto global de estado ---
-      // Esto ayuda a que el componente padre reciba la estructura fija simplificada
-      const result = updated.map(cls => ({
-        ...cls,
-        dayName: cls.date ? getDayName(cls.date) : null
-      }));
-
-      return result;
-    });
-  }, [setScheduledClasses, teacherId]);
+    }
+    
+    return updated.map(cls => ({
+      ...cls,
+      dayName: cls.date ? moment(cls.date).format('dddd').toLowerCase() : null
+    }));
+  });
+}, [setScheduledClasses, teacherId]);
 
   const handleAddClass = useCallback(() => {
     if (!packageDetails) return;

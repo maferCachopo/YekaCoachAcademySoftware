@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Dialog, DialogTitle, DialogContent, DialogActions, Typography,
   TextField, Button, Grid, MenuItem, CircularProgress, FormControlLabel, Switch,
-  Divider, Alert, Paper, Tabs, Tab
+  Divider, Alert, Paper, Tabs, Tab, Autocomplete
 } from '@mui/material';
 import { Add as AddIcon, Event as EventIcon, CalendarMonth as CalendarIcon } from '@mui/icons-material';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -13,6 +13,7 @@ import ClassSchedulingForm from './ClassSchedulingForm';
 import TeacherAvailabilityCalendar from './TeacherAvailabilityCalendar';
 import { fetchWithAuth } from '../../../utils/api';
 import moment from 'moment'; // Importante para manejar los nombres de los días
+
 
 const AddDialog = ({ 
   open, 
@@ -33,6 +34,10 @@ const AddDialog = ({
   const [teacherValidationFn, setTeacherValidationFn] = useState(null);
   const { translations } = useLanguage();
   const { theme } = useTheme();
+  const [allCountries, setAllCountries] = useState([]);
+  const [loadingCountries, setLoadingCountries] = useState(true);
+  const [cities, setCities] = useState([]);
+  const [loadingCities, setLoadingCities] = useState(false);
 
   // Fetch teachers when the dialog opens
   useEffect(() => {
@@ -94,58 +99,52 @@ const AddDialog = ({
   };
 
 // Handle available slot selection from calendar
-  const handleSlotSelect = (slot) => {
-    if (!formData.package) {
-      setMessage({
-        open: true,
-        text: translations.selectPackageFirst || 'Please select a package first',
-        severity: 'warning'
-      });
-      return;
-    }
 
-    const selectedPackage = packages.find(pkg => pkg.id === formData.package);
-    if (!selectedPackage) return;
+const handleSlotSelect = (slot) => {
+  if (!formData.package) {
+    setMessage({ open: true, text: translations.selectPackageFirst, severity: 'warning' });
+    return;
+  }
 
-    // Calcular clases por semana (asumiendo mes de 4 semanas)
-    // Ej: Paquete de 4 clases = 1 por semana. Paquete de 8 clases = 2 por semana.
-    const classesPerWeek = Math.max(1, Math.floor(selectedPackage.totalClasses / 4));
-    
-    // Crear el nuevo objeto de clase
-    const newClass = {
-      id: `class-${Date.now()}`, // ID temporal único
-      date: slot.date,
+  const selectedPkg = packages.find(pkg => pkg.id === formData.package);
+  const totalClasses = selectedPkg.totalClasses;
+
+  // Creamos el array de clases con fechas consecutivas (mismo día, misma hora)
+  const autoScheduled = [];
+  for (let i = 0; i < totalClasses; i++) {
+    autoScheduled.push({
+      id: `class-${i}`,
+      date: moment(slot.date).add(i, 'weeks').format('YYYY-MM-DD'),
       startTime: slot.start,
       endTime: slot.end,
-      teacherId: selectedTeacher
-    };
+      teacherId: selectedTeacher // El ID que seleccionaste arriba en el select
+    });
+  }
 
-    // LÓGICA DE SELECCIÓN INTELIGENTE
-    if (classesPerWeek === 1) {
-      // CASO: 1 CLASE POR SEMANA
-      // Comportamiento tipo "Radio Button": Reemplazar cualquier selección previa
-      setScheduledClasses([newClass]);
-    } else {
-      // CASO: MÁS DE 1 CLASE POR SEMANA (Ej: 2 clases)
-      
-      // Verificar si ya tenemos el máximo de slots seleccionados
-      if (scheduledClasses.length >= classesPerWeek) {
-         // Opción A: Bloquear y avisar
-         // setMessage({ open: true, text: `Solo puedes seleccionar ${classesPerWeek} horarios por semana`, severity: 'warning' });
-         
-         // Opción B (Más fluida): Reemplazar el más antiguo (FIFO) o el último clickeado.
-         // Vamos a reemplazar el último para dar sensación de "movimiento"
-         const updatedClasses = [...scheduledClasses];
-         updatedClasses.shift(); // Sacamos el primero (más viejo)
-         updatedClasses.push(newClass); // Ponemos el nuevo
-         setScheduledClasses(updatedClasses);
-      } else {
-        // Aún hay espacio, agregar
-        setScheduledClasses([...scheduledClasses, newClass]);
-      }
+  setScheduledClasses(autoScheduled);
+  setMessage({ open: true, text: "Cronograma generado para todo el mes", severity: 'success' });
+};
+
+
+  const fetchCities = async (countryName) => {
+    if (!countryName) return;
+    setLoadingCities(true);
+    try {
+      const response = await fetch('https://countriesnow.space/api/v0.1/countries/cities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country: countryName })
+      });
+      const data = await response.json();
+      setCities(data.error ? [] : data.data.sort());
+    } catch (error) {
+      console.error("Error cargando ciudades:", error);
+      setCities([]);
+    } finally {
+      setLoadingCities(false);
     }
   };
-
+  
   const handleAvailabilityValidation = (validationFn) => {
     setTeacherValidationFn(() => validationFn);
   };
@@ -155,192 +154,150 @@ const AddDialog = ({
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const validateForm = () => {
-    if (!formData.name || !formData.surname || !formData.email || !formData.username || !formData.password) {
-      setMessage({
-        open: true,
-        text: translations.fillRequiredFields || 'Please fill all required fields',
-        severity: 'error'
-      });
-      return false;
-    }
+const validateForm = () => {
+  if (!formData.name || !formData.surname || !formData.email || !formData.username || !formData.password) {
+    setMessage({
+      open: true,
+      text: translations.fillRequiredFields || 'Por favor completa todos los campos obligatorios',
+      severity: 'error'
+    });
+    return false;
+  }
 
-    if (formData.password !== formData.confirmPassword) {
-      setMessage({
-        open: true,
-        text: translations.passwordsDoNotMatch || 'Passwords do not match',
-        severity: 'error'
-      });
-      return false;
-    }
+  if (formData.password !== formData.confirmPassword) {
+    setMessage({ open: true, text: translations.passwordsDoNotMatch, severity: 'error' });
+    return false;
+  }
 
-    if (formData.password.length < 6) {
-      setMessage({
-        open: true,
-        text: translations.passwordTooShort || 'Password must be at least 6 characters',
-        severity: 'error'
-      });
-      return false;
-    }
-
-    if (formData.package) {
-      const selectedPackage = packages.find(pkg => pkg.id === formData.package);
-      if (selectedPackage) {
-        // CAMBIO: Validar slots semanales, no el total del paquete
-        const classesPerWeek = Math.max(1, Math.floor(selectedPackage.totalClasses / 4));
-        const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime);
-        
-        if (validClasses.length !== classesPerWeek) {
-          setMessage({
-            open: true,
-            text: translations.scheduleAllClassesError || `Por favor selecciona ${classesPerWeek} horario(s) fijo(s) en el calendario.`,
-            severity: 'error'
-          });
-          return false;
-        }
-
-        if (selectedTeacher && teacherValidationFn) {
-          for (let i = 0; i < validClasses.length; i++) {
-            const cls = validClasses[i];
-            const validation = teacherValidationFn(cls.date, cls.startTime, cls.endTime);
-            if (!validation.valid) {
-              setMessage({
-                open: true,
-                text: `Class ${i + 1}: ${validation.message}`,
-                severity: 'error'
-              });
-              return false;
-            }
-          }
-        }
+  if (formData.package) {
+    const selectedPackage = packages.find(pkg => pkg.id === formData.package);
+    if (selectedPackage) {
+      // MODIFICACIÓN: Validar que el total de clases programadas coincida con el paquete
+      const requiredTotal = selectedPackage.totalClasses; // Ej: 4 para paquete básico
+      const filledClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime);
+      
+      if (filledClasses.length < requiredTotal) {
+        setMessage({
+          open: true,
+          text: `Error: El paquete requiere programar ${requiredTotal} clases. Llevas ${filledClasses.length}.`,
+          severity: 'error'
+        });
+        return false;
       }
     }
+  }
+  return true;
+};
 
-    return true;
+useEffect(() => {
+  const fetchCountries = async () => {
+    try {
+      const response = await fetch('https://restcountries.com/v3.1/all?fields=name,idd,cca2,flags');
+      const data = await response.json();
+      
+      // Formateamos la data para que sea fácil de usar
+      const formatted = data
+        .map(country => ({
+          name: country.name.common,
+          code: country.cca2,
+          flag: country.flags.png,
+          // Algunos países tienen varios sufijos, tomamos el primero
+          dialCode: country.idd.root + (country.idd.suffixes ? country.idd.suffixes[0] : '')
+        }))
+        // Filtramos los que no tienen dialCode y ordenamos alfabéticamente
+        .filter(c => c.dialCode)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      setAllCountries(formatted);
+    } catch (error) {
+      console.error("Error cargando países:", error);
+    } finally {
+      setLoadingCountries(false);
+    }
   };
 
-  const handleAddStudent = async () => {
-    if (!validateForm()) return;
+  if (open) fetchCountries();
+}, [open]);
 
-    setLoading(true);
-    try {
-      const userData = {
-        username: formData.username,
-        password: formData.password,
-        email: formData.email,
-        name: formData.name,
-        surname: formData.surname,
-        birthDate: formData.birthDate || null,
-        phone: formData.phone || '',
-        city: formData.city || '',
-        country: formData.country || '',
-        zoomLink: formData.zoomLink || '',
-        allowDifferentTeacher: formData.allowDifferentTeacher || false
-      };
 
-      const response = await authAPI.register(userData);
+const handleAddStudent = async () => {
+  if (!validateForm()) return;
+
+  setLoading(true);
+  try {
+    const userData = {
+      username: formData.username,
+      password: formData.password,
+      email: formData.email,
+      name: formData.name,
+      surname: formData.surname,
+      birthDate: formData.birthDate || null,
+      phone: formData.phone || '',
+      city: formData.city || '',
+      country: formData.country || '',
+      zoomLink: formData.zoomLink || '',
+      allowDifferentTeacher: formData.allowDifferentTeacher || false
+    };
+
+    // 1. Registro de Usuario y Estudiante
+    const response = await authAPI.register(userData);
+    
+    if (response && (response.studentId || response.userId)) {
+      const studentId = response.studentId;
+
+      // 2. Asignación de Paquete
+      const packageDetails = packages.find(pkg => pkg.id === formData.package);
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + (packageDetails.durationMonths || 1));
       
-      if (formData.package && response && response.userId) {
-        let studentId = response.studentId;
-        
-        if (!studentId) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            const studentsList = await studentAPI.getAllStudents();
-            const studentFound = studentsList.find(s => s.user?.id === response.userId);
-            if (studentFound) studentId = studentFound.id;
-        }
-          
-        if (studentId) {
-            const packageDetails = await packageAPI.getPackageById(formData.package);
-            const startDate = new Date();
-            const endDate = new Date(startDate);
-            endDate.setMonth(endDate.getMonth() + packageDetails.durationMonths);
-            
-            await studentAPI.assignPackage(studentId, {
-              packageId: formData.package,
-              startDate: startDate.toISOString().split('T')[0],
-              endDate: endDate.toISOString().split('T')[0]
-            });
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // --- MODIFICACIÓN PASO 3: ASIGNACIÓN DE PROFESOR CON HORARIO PERMANENTE ---
-            if (selectedTeacher) {
-              // Convertimos las clases programadas en un horario semanal recurrente
-              // Tomamos la hora y el día de la semana de cada clase seleccionada
-              const weeklySchedule = scheduledClasses
-                .filter(cls => cls.date && cls.startTime)
-                .map(cls => ({
-                  day: moment(cls.date).format('dddd').toLowerCase(),
-                  hour: parseInt(cls.startTime.split(':')[0])
-                }));
+      await studentAPI.assignPackage(studentId, {
+        packageId: formData.package,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0]
+      });
+      
+      // 3. Asignación de Profesor y Horario Fijo
+      if (selectedTeacher) {
+        // Tomamos el horario de la primera clase para definir el bloque fijo
+        const weeklySchedule = scheduledClasses
+          .filter(cls => cls.date && cls.startTime)
+          .map(cls => ({
+            day: moment(cls.date).format('dddd').toLowerCase(),
+            startTime: cls.startTime,
+            endTime: cls.endTime
+          })).slice(0, 1); // Solo tomamos el primer bloque como referencia fija
 
-              // Eliminamos duplicados por si acaso
-              const uniqueWeeklySchedule = Array.from(new Set(weeklySchedule.map(s => JSON.stringify(s)))).map(s => JSON.parse(s));
-
-              try {
-                console.log('Assigning teacher with permanent schedule:', { studentId, teacherId: selectedTeacher, uniqueWeeklySchedule });
-                await fetchWithAuth(`/teachers/${selectedTeacher}/students`, {
-                  method: 'POST',
-                  body: JSON.stringify({ 
-                    studentId: studentId,
-                    weeklySchedule: uniqueWeeklySchedule // Enviamos el horario recurrente
-                  })
-                });
-              } catch (assignError) {
-                console.error('Error assigning teacher:', assignError);
-                setMessage({
-                  open: true,
-                  text: translations.teacherAssignmentFailed || 'Student created but teacher assignment failed',
-                  severity: 'warning'
-                });
-              }
-            }
-            
-            // Programar las clases físicas en el calendario
-            if (scheduledClasses.length > 0) {
-              const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime);
-              if (validClasses.length > 0) {
-                const classesWithTeacher = validClasses.map(cls => ({
-                  ...cls,
-                  teacherId: selectedTeacher || undefined
-                }));
-                await studentAPI.scheduleClasses(studentId, {
-                  packageId: formData.package,
-                  classes: classesWithTeacher
-                });
-              }
-            }
-        }
+        await fetchWithAuth(`/teachers/${selectedTeacher}/students`, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            studentId: studentId,
+            weeklySchedule: weeklySchedule 
+          })
+        });
       }
-
-      setMessage({
-        open: true,
-        text: translations.studentAddedSuccess || 'Student added successfully',
-        severity: 'success'
+      
+      // 4. Programación de las clases físicas en el calendario (Las 4 clases)
+      const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime);
+      await studentAPI.scheduleClasses(studentId, {
+        packageId: formData.package,
+        classes: validClasses.map(cls => ({
+          ...cls,
+          teacherId: selectedTeacher
+        }))
       });
 
-      // Resetear estados
-      setFormData({
-        name: '', surname: '', email: '', username: '', phone: '', city: '', country: '',
-        zoomLink: '', password: '', confirmPassword: '', package: '', birthDate: '', allowDifferentTeacher: false
-      });
-      setScheduledClasses([]);
-      setSelectedTeacher('');
-      setTeacherSchedule(null);
+      setMessage({ open: true, text: translations.studentAddedSuccess, severity: 'success' });
       if (typeof refreshStudents === 'function') refreshStudents();
       onClose();
-    } catch (error) {
-      console.error('Error adding student:', error);
-      setMessage({
-        open: true,
-        text: error.message || translations.errorAddingStudent || 'Error adding student',
-        severity: 'error'
-      });
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error('Error al guardar:', error);
+    setMessage({ open: true, text: error.message, severity: 'error' });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const primaryButtonStyle = { background: '#845EC2', color: '#ffffff', '&:hover': { background: '#6B46C1' } };
   const secondaryButtonStyle = { color: theme?.mode === 'light' ? 'rgba(0, 0, 0, 0.87)' : '#ffffff', borderColor: 'rgba(132, 94, 194, 0.5)', '&:hover': { borderColor: '#845EC2', backgroundColor: theme?.mode === 'light' ? 'rgba(132, 94, 194, 0.08)' : 'rgba(132, 94, 194, 0.15)' } };
@@ -348,7 +305,12 @@ const AddDialog = ({
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={(event, reason) => {
+        if (reason !== 'backdropClick' && reason !== 'escapeKeyDown') {
+          onClose();
+        }
+      }}
+      disableEscapeKeyDown
       maxWidth="md"
       fullWidth
       PaperProps={{ sx: { borderRadius: 5, boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)', overflow: 'visible', bgcolor: theme.mode === 'light' ? '#fff' : '#151521' } }}
@@ -368,10 +330,160 @@ const AddDialog = ({
           <Grid item xs={12} sm={6}><TextField label={translations.username} name="username" value={formData.username} onChange={handleFormChange} fullWidth required variant="outlined" sx={{...textFieldStyle(theme), mt: 0}} /></Grid>
           <Grid item xs={12} sm={6}><TextField label={translations.password} name="password" type="password" value={formData.password} onChange={handleFormChange} fullWidth required variant="outlined" sx={{...textFieldStyle(theme), mt: 0}} /></Grid>
           <Grid item xs={12} sm={6}><TextField label={translations.confirmPassword} name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleFormChange} fullWidth required variant="outlined" sx={{...textFieldStyle(theme), mt: 0}} /></Grid>
-          <Grid item xs={12} sm={6}><TextField label={translations.phone} name="phone" value={formData.phone} onChange={handleFormChange} fullWidth variant="outlined" sx={{...textFieldStyle(theme), mt: 0}} /></Grid>
-          <Grid item xs={12} sm={6}><TextField label={translations.city} name="city" value={formData.city} onChange={handleFormChange} fullWidth variant="outlined" sx={{...textFieldStyle(theme), mt: 0}} /></Grid>
-          <Grid item xs={12} sm={6}><TextField label={translations.country} name="country" value={formData.country} onChange={handleFormChange} fullWidth variant="outlined" sx={{...textFieldStyle(theme), mt: 0}} /></Grid>
           <Grid item xs={12} sm={6}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {/* Selector de País con Búsqueda e Iniciales */}
+              <Autocomplete
+                options={allCountries}
+                getOptionLabel={(option) => `${option.code} ${option.dialCode}`}
+                // Esto permite buscar por nombre de país, dialCode o inicial (CCA2)
+                filterOptions={(options, { inputValue }) => {
+                  return options.filter(item => 
+                    item.name.toLowerCase().includes(inputValue.toLowerCase()) ||
+                    item.dialCode.includes(inputValue) ||
+                    item.code.toLowerCase().includes(inputValue.toLowerCase())
+                  );
+                }}
+                value={allCountries.find(c => c.dialCode === formData.countryCode) || null}
+                onChange={(event, newValue) => {
+                  const countryName = newValue ? newValue.name : '';
+                  const dialCode = newValue ? newValue.dialCode : '';
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    country: countryName, 
+                    city: '',
+                    countryCode: dialCode // <--- Esto actualiza el prefijo del teléfono automáticamente
+                  }));
+                }}
+                loading={loadingCountries}
+                disableClearable
+                sx={{ width: '160px' }}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props} sx={{ display: 'flex', gap: 1, fontSize: '0.85rem' }}>
+                    <img src={option.flag} alt={option.code} width="20" />
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{option.code}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>{option.dialCode}</Typography>
+                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{option.name}</Typography>
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="País"
+                    variant="outlined"
+                    sx={{ ...textFieldStyle(theme), mt: 0 }}
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          {loadingCountries ? <CircularProgress color="inherit" size={20} /> : null}
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+
+              {/* Campo de Número de Teléfono */}
+              <TextField
+                label={translations.phone}
+                name="phone"
+                value={formData.phone}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, ''); // Solo números
+                  // Definimos un límite genérico largo, la validación real se puede hacer al guardar
+                  if (val.length <= 15) {
+                    setFormData(prev => ({ ...prev, phone: val }));
+                  }
+                }}
+                fullWidth
+                variant="outlined"
+                placeholder="Número local"
+                sx={{ ...textFieldStyle(theme), mt: 0 }}
+              />
+            </Box>
+          </Grid>
+          {/* Campo País con Autocomplete (Corregido con Key y Automatización de Código) */}
+          <Grid item xs={12} sm={6}>
+            <Autocomplete
+              options={allCountries}
+              getOptionLabel={(option) => option.name || ""}
+              value={allCountries.find(c => c.name === formData.country) || null}
+              onChange={(event, newValue) => {
+                const countryName = newValue ? newValue.name : '';
+                const dialCode = newValue ? newValue.dialCode : '';
+                
+                // Actualizamos país, limpiamos ciudad y ponemos el código telefónico automáticamente
+                setFormData(prev => ({ 
+                  ...prev, 
+                  country: countryName, 
+                  city: '',
+                  countryCode: dialCode 
+                }));
+                
+                if (countryName) fetchCities(countryName);
+              }}
+              // Solución al error de la consola: Extraer la key explícitamente
+              renderOption={(props, option) => {
+                const { key, ...optionProps } = props;
+                return (
+                  <Box 
+                    component="li" 
+                    key={key} 
+                    {...optionProps} 
+                    sx={{ display: 'flex', gap: 1, fontSize: '0.85rem' }}
+                  >
+                    <img src={option.flag} alt={option.code} width="20" height="14" style={{ borderRadius: '2px' }} />
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '25px' }}>{option.code}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', minWidth: '40px' }}>{option.dialCode}</Typography>
+                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{option.name}</Typography>
+                  </Box>
+                );
+              }}
+              renderInput={(params) => (
+                <TextField 
+                  {...params} 
+                  label={translations.country} 
+                  variant="outlined" 
+                  sx={textFieldStyle(theme)} 
+                />
+              )}
+            />
+          </Grid>
+
+          {/* Campo Ciudad con Autocomplete */}
+          <Grid item xs={12} sm={6}>
+            <Autocomplete
+              options={cities}
+              freeSolo
+              loading={loadingCities}
+              value={formData.city || ''}
+              onInputChange={(event, newInputValue) => {
+                setFormData(prev => ({ ...prev, city: newInputValue }));
+              }}
+              disabled={!formData.country} // Se bloquea si no hay país
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label={translations.city}
+                  variant="outlined"
+                  sx={textFieldStyle(theme)}
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {loadingCities ? <CircularProgress color="inherit" size={20} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                  placeholder={!formData.country ? "Selecciona un país primero" : "Escribe o busca tu ciudad"}
+                />
+              )}
+            />
+          </Grid>
+                    <Grid item xs={12} sm={6}>
             <TextField select label={translations.package} name="package" value={formData.package} onChange={handleFormChange} fullWidth variant="outlined" sx={{...textFieldStyle(theme), mt: 0}}>
               <MenuItem value=""><em>{translations.noPackage}</em></MenuItem>
               {packages.map((pkg) => (<MenuItem key={pkg.id} value={pkg.id}>{pkg.name}</MenuItem>))}

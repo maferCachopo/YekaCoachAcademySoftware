@@ -60,6 +60,7 @@ router.get('/:id', verifyToken, isSelfOrAdmin, async (req, res) => {
   }
 });
 
+
 /**
  * RUTA CRÍTICA: Asignar paquete a estudiante
  */
@@ -94,6 +95,22 @@ router.post('/:id/packages', verifyToken, isAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error in POST /students/:id/packages:', error);
     return res.status(500).json({ message: 'Internal Server Error', error: error.message });
+  }
+});
+
+
+// Obtener paquetes de un estudiante específico (Faltaba esta ruta)
+router.get('/:id/packages', verifyToken, isSelfOrAdmin, async (req, res) => {
+  try {
+    const studentPackages = await StudentPackage.findAll({
+      where: { studentId: req.params.id },
+      include: [{ model: Package, as: 'package' }],
+      order: [['createdAt', 'DESC']]
+    });
+    return res.json(studentPackages);
+  } catch (error) {
+    console.error('Error fetching student packages:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
