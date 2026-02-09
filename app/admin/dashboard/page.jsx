@@ -500,6 +500,7 @@ export default function AdminDashboard() {
         
         // Get dashboard stats
         const statsData = await adminAPI.getDashboardStats();
+        console.log("Stats recibidos del server:", statsData); 
         
         // Get reschedule data separately to ensure complete data
         const reschedules = await adminAPI.getRescheduledClasses();
@@ -509,7 +510,9 @@ export default function AdminDashboard() {
         
         // Combine all data
         setDashboardData({
-          ...statsData,
+          totalStudents: statsData.totalStudents || 0,
+          activePackages: statsData.activePackages || 0,
+          classesToday: statsData.classesToday || 0,
           recentReschedules: formattedReschedules
         });
       } catch (error) {

@@ -1,9 +1,9 @@
 const express = require('express');
 const { Student, User, StudentPackage, Package, Class, StudentClass, RescheduleClass, Teacher } = require('../models');
 const { verifyToken, isAdmin } = require('../middleware/auth');
-const { Op } = require('sequelize');
 const { updateClassStatus, updateStudentClassStatus } = require('../utils/scheduler');
 const moment = require('moment-timezone');
+const { Op } = require('sequelize');
 const timezoneUtils = require('../utils/timezoneUtils');
 
 const router = express.Router();
@@ -17,26 +17,42 @@ router.use(isAdmin);
 // Get admin dashboard stats
 router.get('/stats', async (req, res) => {
   try {
-    // Get total students count
-    const totalStudents = await Student.count();
-    
-    // Get active packages count
-    const activePackages = await StudentPackage.count({
-      where: { status: 'active' }
+    // 1. Estudiantes Reales: Contamos todos los que NO estén marcados como inactivos (0)
+    // Usamos Op.or para capturar registros donde active sea true, 1 o null
+    const totalStudents = await Student.count({
+      where: { 
+        [Op.or]: [
+          { active: true },
+          { active: 1 },
+          { active: null } 
+        ]
+      }
     });
     
-    // Get classes scheduled for today
-    const today = new Date().toISOString().split('T')[0];
+    // 2. Paquetes Activos (Suscripciones vigentes de alumnos):
+    // Cambiamos 'Package' por 'StudentPackage' para ver cuántos alumnos tienen planes hoy
+    const activePackagesCount = await StudentPackage.count({ 
+      where: { status: 'active' } 
+    });
+
+    // 3. Clases de HOY (Ajuste de zona horaria estricto)
+    const adminTz = 'America/Caracas'; 
+    const today = moment().tz(adminTz).format('YYYY-MM-DD');
+    
+    console.log('Consultando estadísticas para la fecha:', today);
+
     const classesToday = await Class.count({
       where: {
-        date: today
+        date: today,
+        // Contamos tanto las programadas como las completadas del día de hoy
+        status: { [Op.in]: ['scheduled', 'completed'] } 
       }
     });
     
     res.json({
-      totalStudents,
-      activePackages,
-      classesToday
+      totalStudents: totalStudents || 0,
+      activePackages: activePackagesCount || 0,
+      classesToday: classesToday || 0
     });
   } catch (error) {
     console.error('Get admin stats error:', error);
