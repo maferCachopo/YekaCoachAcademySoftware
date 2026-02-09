@@ -197,8 +197,7 @@ export default function Teachers() {
 
     try {
       setResetPasswordData(prev => ({ ...prev, isResetting: true }));
-      
-      console.log(`Attempting to reset password for teacher ID: ${selectedTeacher.id}`);
+    
       
       await fetchWithAuth(`/teachers/${selectedTeacher.id}/reset-password`, {
         method: 'POST',
@@ -207,8 +206,6 @@ export default function Teachers() {
           'Content-Type': 'application/json'
         }
       });
-      
-      console.log('Password reset successful');
       
       setMessage({
         open: true,

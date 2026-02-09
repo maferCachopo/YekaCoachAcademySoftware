@@ -93,7 +93,7 @@ const AddDialog = ({
     }
   };
 
-  // Handle available slot selection from calendar
+// Handle available slot selection from calendar
   const handleSlotSelect = (slot) => {
     if (!formData.package) {
       setMessage({
@@ -107,36 +107,42 @@ const AddDialog = ({
     const selectedPackage = packages.find(pkg => pkg.id === formData.package);
     if (!selectedPackage) return;
 
-    if (scheduledClasses.length >= selectedPackage.totalClasses) {
-      const emptyClassIndex = scheduledClasses.findIndex(cls => !cls.date || !cls.startTime || !cls.endTime);
-      
-      if (emptyClassIndex >= 0) {
-        const updatedClasses = [...scheduledClasses];
-        updatedClasses[emptyClassIndex] = {
-          ...updatedClasses[emptyClassIndex],
-          date: slot.date,
-          startTime: slot.start,
-          endTime: slot.end,
-          teacherId: selectedTeacher
-        };
-        setScheduledClasses(updatedClasses);
-      } else {
-        setMessage({
-          open: true,
-          text: translations.maxClassesReached || `Maximum number of classes (${selectedPackage.totalClasses}) already scheduled`,
-          severity: 'warning'
-        });
-      }
+    // Calcular clases por semana (asumiendo mes de 4 semanas)
+    // Ej: Paquete de 4 clases = 1 por semana. Paquete de 8 clases = 2 por semana.
+    const classesPerWeek = Math.max(1, Math.floor(selectedPackage.totalClasses / 4));
+    
+    // Crear el nuevo objeto de clase
+    const newClass = {
+      id: `class-${Date.now()}`, // ID temporal único
+      date: slot.date,
+      startTime: slot.start,
+      endTime: slot.end,
+      teacherId: selectedTeacher
+    };
+
+    // LÓGICA DE SELECCIÓN INTELIGENTE
+    if (classesPerWeek === 1) {
+      // CASO: 1 CLASE POR SEMANA
+      // Comportamiento tipo "Radio Button": Reemplazar cualquier selección previa
+      setScheduledClasses([newClass]);
     } else {
-      const newClass = {
-        id: `class-${scheduledClasses.length}`,
-        date: slot.date,
-        startTime: slot.start,
-        endTime: slot.end,
-        teacherId: selectedTeacher
-      };
+      // CASO: MÁS DE 1 CLASE POR SEMANA (Ej: 2 clases)
       
-      setScheduledClasses([...scheduledClasses, newClass]);
+      // Verificar si ya tenemos el máximo de slots seleccionados
+      if (scheduledClasses.length >= classesPerWeek) {
+         // Opción A: Bloquear y avisar
+         // setMessage({ open: true, text: `Solo puedes seleccionar ${classesPerWeek} horarios por semana`, severity: 'warning' });
+         
+         // Opción B (Más fluida): Reemplazar el más antiguo (FIFO) o el último clickeado.
+         // Vamos a reemplazar el último para dar sensación de "movimiento"
+         const updatedClasses = [...scheduledClasses];
+         updatedClasses.shift(); // Sacamos el primero (más viejo)
+         updatedClasses.push(newClass); // Ponemos el nuevo
+         setScheduledClasses(updatedClasses);
+      } else {
+        // Aún hay espacio, agregar
+        setScheduledClasses([...scheduledClasses, newClass]);
+      }
     }
   };
 
@@ -180,13 +186,14 @@ const AddDialog = ({
     if (formData.package) {
       const selectedPackage = packages.find(pkg => pkg.id === formData.package);
       if (selectedPackage) {
-        const requiredClasses = selectedPackage.totalClasses;
+        // CAMBIO: Validar slots semanales, no el total del paquete
+        const classesPerWeek = Math.max(1, Math.floor(selectedPackage.totalClasses / 4));
         const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime);
         
-        if (validClasses.length !== requiredClasses) {
+        if (validClasses.length !== classesPerWeek) {
           setMessage({
             open: true,
-            text: translations.scheduleAllClassesError || `Please schedule exactly ${requiredClasses} classes for this package`,
+            text: translations.scheduleAllClassesError || `Por favor selecciona ${classesPerWeek} horario(s) fijo(s) en el calendario.`,
             severity: 'error'
           });
           return false;

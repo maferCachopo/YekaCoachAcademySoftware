@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { 
   Box, Typography, CircularProgress, Alert, 
   Table, TableBody, TableCell, TableContainer, 
@@ -10,11 +10,8 @@ import moment from 'moment';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
 
-/**
- * Matriz Semanal Recurrente (8 AM - 11 PM)
- */
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-const HOURS = Array.from({ length: 15 }, (_, i) => i + 8); // Genera [8, 9, ..., 22]
+const HOURS = Array.from({ length: 15 }, (_, i) => i + 8); // 8 AM - 10 PM
 
 const TeacherAvailabilityCalendar = ({ 
   teacherSchedule, 
@@ -26,77 +23,76 @@ const TeacherAvailabilityCalendar = ({
   const { theme } = useTheme();
   const { translations } = useLanguage();
 
-  // Helper para convertir "HH:mm" a minutos
   const timeToMinutes = (timeStr) => {
     if (!timeStr) return 0;
     const [h, m] = timeStr.split(':').map(Number);
     return h * 60 + m;
   };
 
-  // Verifica si un bloque específico (Día y Hora) es válido según la disponibilidad del profesor
+  // Verifica el estado de cada celda
   const checkSlotStatus = useCallback((day, hour) => {
     if (!teacherSchedule) return { type: 'unavailable' };
 
     const slotStart = hour * 60;
     const slotEnd = (hour + 1) * 60;
 
-    // 1. Verificar si el profesor trabaja ese día
-    const workingDays = teacherSchedule.workingDays || [];
-    if (!workingDays.includes(day)) return { type: 'unavailable', label: 'No laborable' };
+    // 1. NUEVO: Verificar si el bloque ya está ocupado por un estudiante fijo
+    if (teacherSchedule.assignedStudents && teacherSchedule.assignedStudents.length > 0) {
+      // Buscamos si algún estudiante tiene este bloque en su fixedSchedule
+      const occupiedBy = teacherSchedule.assignedStudents.find(student => 
+        student.fixedSchedule?.some(fixedSlot => 
+          fixedSlot.day.toLowerCase() === day && 
+          parseInt(fixedSlot.hour) === hour
+        )
+      );
 
-    // 2. Verificar si está dentro de las Work Hours
+      if (occupiedBy) {
+        return { 
+          type: 'occupied', 
+          label: `Ocupado por: ${occupiedBy.fullName}`,
+          disabled: true 
+        };
+      }
+    }
+
+    // 2. Verificar si el profesor trabaja ese día
+    const workingDays = teacherSchedule.workingDays || [];
+    if (!workingDays.includes(day)) return { type: 'unavailable', label: 'No laborable', disabled: true };
+
+    // 3. Verificar si está dentro de las Work Hours
     const dayWorkHours = teacherSchedule.workHours?.[day] || [];
     const isWithinWork = dayWorkHours.some(w => {
       return slotStart >= timeToMinutes(w.start) && slotEnd <= timeToMinutes(w.end);
     });
-    if (!isWithinWork) return { type: 'unavailable', label: 'Fuera de horario' };
+    if (!isWithinWork) return { type: 'unavailable', label: 'Fuera de horario', disabled: true };
 
-    // 3. Verificar si cae en Break Hours
+    // 4. Verificar si cae en Break Hours
     const dayBreakHours = teacherSchedule.breakHours?.[day] || [];
     const isInBreak = dayBreakHours.some(b => {
       const bStart = timeToMinutes(b.start);
       const bEnd = timeToMinutes(b.end);
       return (slotStart < bEnd && slotEnd > bStart);
     });
-    if (isInBreak) return { type: 'break', label: 'Descanso' };
+    if (isInBreak) return { type: 'break', label: 'Descanso', disabled: true };
 
-    // 4. Verificar si ya está seleccionado en el formulario actual
+    // 5. Verificar si está seleccionado actualmente en el formulario
     const isSelected = scheduledClasses.some(cls => {
-      // Nota: Si el formulario usa fechas, esto compara por el nombre del día
       const clsDay = moment(cls.date).format('dddd').toLowerCase();
       const clsStart = timeToMinutes(cls.startTime);
       return clsDay === day && clsStart === slotStart;
     });
-    if (isSelected) return { type: 'selected', label: 'Seleccionado' };
+    if (isSelected) return { type: 'selected', label: 'Seleccionado', disabled: false };
 
-    return { type: 'available', label: 'Disponible' };
+    return { type: 'available', label: 'Disponible', disabled: false };
   }, [teacherSchedule, scheduledClasses]);
-
-  // Validar una clase específica (usado por el componente padre)
-  const validateClassTime = useCallback((date, startTime, endTime) => {
-    if (!teacherSchedule) return { valid: false, message: 'Cargando...' };
-    const day = moment(date).format('dddd').toLowerCase();
-    const hour = parseInt(startTime.split(':')[0]);
-    const status = checkSlotStatus(day, hour);
-    
-    if (status.type === 'available' || status.type === 'selected') {
-      return { valid: true };
-    }
-    return { valid: false, message: status.label || 'Horario no disponible' };
-  }, [teacherSchedule, checkSlotStatus]);
-
-  useEffect(() => {
-    if (onAvailabilityValidation && teacherSchedule) {
-      onAvailabilityValidation(validateClassTime);
-    }
-  }, [teacherSchedule, onAvailabilityValidation, validateClassTime]);
 
   const handleCellClick = (day, hour) => {
     const status = checkSlotStatus(day, hour);
-    if (status.type === 'available' || status.type === 'selected') {
+    // Solo permitir click si no está deshabilitado (ocupado, descanso, no laboral)
+    if (!status.disabled) {
       onSlotSelect({
         day,
-        date: moment().day(day).format('YYYY-MM-DD'), // Fecha de referencia (esta semana)
+        date: moment().day(day).format('YYYY-MM-DD'), // Fecha referencial para esta semana
         start: `${hour.toString().padStart(2, '0')}:00`,
         end: `${(hour + 1).toString().padStart(2, '0')}:00`
       });
@@ -104,36 +100,30 @@ const TeacherAvailabilityCalendar = ({
   };
 
   if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>;
   }
 
   if (!teacherSchedule) {
-    return <Alert severity="info">Seleccione un profesor para ver su cronograma.</Alert>;
+    return <Alert severity="info">{translations.selectTeacherFirst || 'Select a teacher first'}</Alert>;
   }
 
   return (
     <Box sx={{ width: '100%', mt: 2 }}>
       <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.secondary' }}>
-        Cronograma Semanal Recurrente (Bloques de 1 hora)
+        {translations.teacherSchedule || 'Teacher Schedule'}
       </Typography>
       
       <TableContainer component={Paper} sx={{ 
-        maxHeight: 500, 
+        maxHeight: 400, 
         border: `1px solid ${theme.palette.divider}`,
-        '&::-webkit-scrollbar': { width: 8 },
-        '&::-webkit-scrollbar-thumb': { backgroundColor: '#ccc', borderRadius: 4 }
       }}>
         <Table stickyHeader size="small">
           <TableHead>
             <TableRow>
-              <TableCell sx={{ bgcolor: theme.palette.background.default, fontWeight: 'bold' }}>Hora</TableCell>
+              <TableCell sx={{ bgcolor: theme.palette.background.paper, fontWeight: 'bold', width: 60 }}>Hora</TableCell>
               {DAYS.map(day => (
                 <TableCell key={day} align="center" sx={{ 
-                  bgcolor: theme.palette.background.default, 
+                  bgcolor: theme.palette.background.paper, 
                   fontWeight: 'bold', 
                   textTransform: 'capitalize',
                   minWidth: 80
@@ -151,7 +141,28 @@ const TeacherAvailabilityCalendar = ({
                 </TableCell>
                 {DAYS.map(day => {
                   const status = checkSlotStatus(day, hour);
-                  const isSelectable = status.type === 'available' || status.type === 'selected';
+                  
+                  // Definir colores
+                  let bgColor = 'transparent';
+                  let textColor = 'inherit';
+                  let cursor = 'pointer';
+
+                  if (status.type === 'selected') {
+                    bgColor = '#845EC2';
+                    textColor = 'white';
+                  } else if (status.type === 'occupied') {
+                    bgColor = '#4B4453'; // Gris oscuro para ocupado
+                    textColor = 'white';
+                    cursor = 'not-allowed';
+                  } else if (status.type === 'available') {
+                    bgColor = 'rgba(76, 175, 80, 0.2)';
+                  } else if (status.type === 'break') {
+                    bgColor = 'rgba(255, 152, 0, 0.2)';
+                    cursor = 'not-allowed';
+                  } else {
+                    bgColor = theme.palette.mode === 'light' ? '#f5f5f5' : '#2c2c3a'; // No laboral
+                    cursor = 'not-allowed';
+                  }
 
                   return (
                     <Tooltip key={day} title={`${day} - ${hour}:00 (${status.label})`} arrow>
@@ -159,21 +170,19 @@ const TeacherAvailabilityCalendar = ({
                         align="center"
                         onClick={() => handleCellClick(day, hour)}
                         sx={{ 
-                          cursor: isSelectable ? 'pointer' : 'not-allowed',
-                          bgcolor: 
-                            status.type === 'selected' ? '#845EC2' : 
-                            status.type === 'available' ? 'rgba(76, 175, 80, 0.2)' : 
-                            status.type === 'break' ? 'rgba(255, 152, 0, 0.2)' : 
-                            'rgba(0, 0, 0, 0.05)',
-                          color: status.type === 'selected' ? 'white' : 'inherit',
+                          cursor,
+                          bgcolor: bgColor,
+                          color: textColor,
                           border: `1px solid ${theme.palette.divider}`,
-                          transition: '0.2s',
+                          height: 40,
+                          padding: 0,
+                          fontSize: '0.75rem',
                           '&:hover': {
-                            bgcolor: isSelectable ? (status.type === 'selected' ? '#6B46C1' : 'rgba(76, 175, 80, 0.4)') : 'inherit'
+                            opacity: status.disabled ? 1 : 0.7
                           }
                         }}
                       >
-                        {status.type === 'selected' ? '✓' : ''}
+                        {status.type === 'selected' ? '✓' : status.type === 'occupied' ? 'Busy' : ''}
                       </TableCell>
                     </Tooltip>
                   );
@@ -183,13 +192,13 @@ const TeacherAvailabilityCalendar = ({
           </TableBody>
         </Table>
       </TableContainer>
-
-      {/* Leyenda */}
+      
+      {/* Leyenda Actualizada */}
       <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
         <LegendItem color="rgba(76, 175, 80, 0.2)" label="Disponible" />
         <LegendItem color="#845EC2" label="Seleccionado" />
+        <LegendItem color="#4B4453" label="Ocupado (Estudiante Fijo)" />
         <LegendItem color="rgba(255, 152, 0, 0.2)" label="Descanso" />
-        <LegendItem color="rgba(0, 0, 0, 0.05)" label="No disponible" />
       </Box>
     </Box>
   );
@@ -197,7 +206,7 @@ const TeacherAvailabilityCalendar = ({
 
 const LegendItem = ({ color, label }) => (
   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-    <Box sx={{ width: 16, height: 16, bgcolor: color, border: '1px solid #ddd', borderRadius: 0.5 }} />
+    <Box sx={{ width: 16, height: 16, bgcolor: color, borderRadius: 0.5, border: '1px solid #ddd' }} />
     <Typography variant="caption">{label}</Typography>
   </Box>
 );
