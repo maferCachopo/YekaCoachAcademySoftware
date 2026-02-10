@@ -159,10 +159,11 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
     // Extraemos los días y horas únicos para que el nombre del alumno aparezca siempre en el cronograma
     const weeklySchedule = classes.map(cls => ({
       day: moment(cls.date).format('dddd').toLowerCase(),
+      hour: parseInt(cls.startTime.split(':')[0]),
       startTime: cls.startTime,
       endTime: cls.endTime
     })).filter((v, i, a) => a.findIndex(t => (
-      t.day === v.day && t.startTime === v.startTime && t.endTime === v.endTime
+       t.day === v.day && t.hour === v.hour
     )) === i);
 
     // Actualizamos la relación para que el profesor vea al alumno en esos bloques específicos

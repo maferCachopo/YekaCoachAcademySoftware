@@ -264,15 +264,18 @@ const handleAddStudent = async () => {
           .filter(cls => cls.date && cls.startTime)
           .map(cls => ({
             day: moment(cls.date).format('dddd').toLowerCase(),
+            hour: parseInt(cls.startTime.split(':')[0]),
             startTime: cls.startTime,
             endTime: cls.endTime
           })).slice(0, 1); // Solo tomamos el primer bloque como referencia fija
+
+        const uniqueWeeklySchedule = Array.from(new Set(weeklySchedule.map(s => JSON.stringify(s)))).map(s => JSON.parse(s));
 
         await fetchWithAuth(`/teachers/${selectedTeacher}/students`, {
           method: 'POST',
           body: JSON.stringify({ 
             studentId: studentId,
-            weeklySchedule: weeklySchedule 
+            weeklySchedule: uniqueWeeklySchedule  
           })
         });
       }
@@ -496,7 +499,37 @@ const handleAddStudent = async () => {
             </TextField>
           </Grid>
           <Grid item xs={12}><TextField label={translations.zoomLink} name="zoomLink" value={formData.zoomLink || ''} onChange={handleFormChange} fullWidth variant="outlined" placeholder="https://zoom.us/j/123456789" sx={{...textFieldStyle(theme), mt: 0}} /></Grid>
-          <Grid item xs={12}><FormControlLabel control={<Switch checked={formData.allowDifferentTeacher || false} onChange={(e) => setFormData(prev => ({ ...prev, allowDifferentTeacher: e.target.checked }))} color="primary" />} label={translations.allowDifferentTeacher} sx={{ mt: 1, color: theme.text?.primary }} /></Grid>
+          <Grid item xs={12}> <Box sx={{ mt: 1 }}>
+                {/* Texto de encabezado/explicación */}
+                <Typography 
+                  variant="subtitle2" 
+                  sx={{ 
+                    mb: 1, 
+                    fontWeight: 'bold', 
+                    color: theme.text?.primary,
+                    display: 'block' 
+                  }}
+                >
+                  {translations.allowDifferentTeacherHeader || 'Permisos de Reprogramación:'}
+                </Typography>
+                
+                {/* El botón de Switch */}
+                <FormControlLabel 
+                  control={
+                    <Switch 
+                      checked={formData.allowDifferentTeacher || false} 
+                      onChange={(e) => setFormData(prev => ({ ...prev, allowDifferentTeacher: e.target.checked }))} 
+                      color="primary" 
+                    />
+                  } 
+                  label={
+                    <Typography variant="body2" sx={{ color: theme.text?.secondary }}>
+                      {translations.allowDifferentTeacher || 'Permitir que el estudiante reagende con otros profesores disponibles'}
+                    </Typography>
+                  }
+                  sx={{ color: theme.text?.primary }} 
+                />
+              </Box></Grid>
         </Grid>
         
         {selectedTeacher && (
