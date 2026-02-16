@@ -79,6 +79,7 @@ export default function Packages() {
     description: '',
     totalClasses: 4,
     durationMonths: 1,
+    durationWeeks: 4, 
     maxReschedules: 1,
     price: 0,
   });
@@ -122,7 +123,7 @@ export default function Packages() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: name === 'price' || name === 'totalClasses' || name === 'durationMonths' || name === 'maxReschedules' ? Number(value) : value });
+    setFormData({ ...formData, [name]: name === 'price' || name === 'totalClasses' || name === 'durationMonths' || name === 'durationWeeks' || name === 'maxReschedules' ? Number(value) : value });
   };
 
   const handleAddPackage = () => {
@@ -144,6 +145,7 @@ export default function Packages() {
       description: pkg.description || '',
       totalClasses: pkg.totalClasses,
       durationMonths: pkg.durationMonths,
+      durationWeeks: pkg.durationWeeks || 4,
       maxReschedules: pkg.maxReschedules,
       price: pkg.price,
       active: pkg.active,
@@ -450,6 +452,14 @@ export default function Packages() {
                   {translations.totalClasses || 'Total Classes'}
                 </TableCell>
                 <TableCell sx={{ 
+                    fontWeight: 600, 
+                    fontSize: { xs: '0.8rem', sm: '0.95rem' }, 
+                    color: theme?.text?.primary,
+                    display: { xs: 'none', sm: 'table-cell' }, // Oculto en móvil como descripción
+                  }}>
+                    Semanas
+                  </TableCell>
+                <TableCell sx={{ 
                   fontWeight: 600, 
                   fontSize: { xs: '0.8rem', sm: '0.95rem' }, 
                   color: theme?.text?.primary,
@@ -505,6 +515,12 @@ export default function Packages() {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <CalendarIcon sx={{ color: '#D65DB1', fontSize: { xs: '1rem', sm: '1.25rem' } }} />
                       {pkg.totalClasses}
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <CalendarIcon sx={{ color: '#FF9671', fontSize: { xs: '1rem', sm: '1.25rem' } }} />
+                      {pkg.durationWeeks || 4}
                     </Box>
                   </TableCell>
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
@@ -633,6 +649,18 @@ export default function Packages() {
               margin="normal"
               sx={textFieldStyle(theme)}
             />
+            <TextField
+                label="Semanas de Duración"
+                name="durationWeeks"
+                type="number"
+                value={formData.durationWeeks}
+                onChange={handleChange}
+                fullWidth
+                variant="outlined"
+                margin="normal"
+                sx={textFieldStyle(theme)}
+                helperText="4 para mensual, 12 para trimestral"
+              />
             <TextField
               label={translations.durationMonths || 'Duration (Months)'}
               name="durationMonths"

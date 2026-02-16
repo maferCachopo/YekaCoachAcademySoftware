@@ -21,6 +21,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 1
+    }, 
+    durationWeeks: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 4 // Por defecto mensual
     },
     maxReschedules: {
       type: DataTypes.INTEGER,

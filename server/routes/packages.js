@@ -58,7 +58,8 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       name, 
       description, 
       totalClasses, 
-      durationMonths, 
+      durationMonths,
+      durationWeeks, 
       maxReschedules, 
       price 
     } = req.body;
@@ -76,6 +77,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       description: description || null,
       totalClasses,
       durationMonths: durationMonths || 1,
+      durationWeeks: durationWeeks || 4,
       maxReschedules: maxReschedules || 2,
       price,
       active: true

@@ -46,6 +46,12 @@ const AddDialog = ({
     }
   }, [open]);
 
+  useEffect(() => {
+    // Si cambia el paquete, reiniciamos la selección para que coincida con el nuevo límite
+    setScheduledClasses([]);
+  }, [formData.package]);
+
+
   // Fetch teachers list
   const fetchTeachers = async () => {
     try {
@@ -100,31 +106,103 @@ const AddDialog = ({
 
 // Handle available slot selection from calendar
 
+// Dentro de AddDialog.jsx
+
 const handleSlotSelect = (slot) => {
   if (!formData.package) {
     setMessage({ open: true, text: translations.selectPackageFirst, severity: 'warning' });
     return;
   }
 
+  // 1. Configuración del paquete
   const selectedPkg = packages.find(pkg => pkg.id === formData.package);
-  const totalClasses = selectedPkg.totalClasses;
+  const totalClassesTarget = selectedPkg.totalClasses;
+  const maxSlotsPerWeek = totalClassesTarget / 4; 
 
-  // Creamos el array de clases con fechas consecutivas (mismo día, misma hora)
-  const autoScheduled = [];
-  for (let i = 0; i < totalClasses; i++) {
-    autoScheduled.push({
-      id: `class-${i}`,
-      date: moment(slot.date).add(i, 'weeks').format('YYYY-MM-DD'),
-      startTime: slot.start,
-      endTime: slot.end,
-      teacherId: selectedTeacher // El ID que seleccionaste arriba en el select
-    });
+  // 2. Identificar bloques base (Día y Hora) actualmente en el cronograma
+  const currentBasesMap = new Map();
+  scheduledClasses.forEach(cls => {
+    const dayName = moment(cls.date).format('dddd').toLowerCase();
+    const hour = cls.startTime.split(':')[0].padStart(2, '0');
+    const key = `${dayName}-${hour}`;
+    
+    if (!currentBasesMap.has(key)) {
+      currentBasesMap.set(key, {
+        day: dayName,
+        startTime: cls.startTime,
+        endTime: cls.endTime
+      });
+    }
+  });
+
+  const clickedHour = slot.start.split(':')[0].padStart(2, '0');
+  const clickedKey = `${slot.day}-${clickedHour}`;
+  
+  let nextBases = Array.from(currentBasesMap.values());
+
+  // 3. Lógica de Selección y Bloqueo
+  if (currentBasesMap.has(clickedKey)) {
+    // DESMARCAR: Si ya existe, lo quitamos
+    nextBases = nextBases.filter(b => `${b.day}-${b.startTime.split(':')[0].padStart(2, '0')}` !== clickedKey);
+  } else {
+    // MARCAR NUEVO:
+    if (nextBases.length < maxSlotsPerWeek) {
+      nextBases.push({ 
+        day: slot.day, 
+        startTime: slot.start, 
+        endTime: slot.end 
+      });
+    } else {
+      // BLOQUEO: Ya llegó al límite del paquete
+      setMessage({ 
+        open: true, 
+        text: `Límite alcanzado: Este paquete permite ${maxSlotsPerWeek} bloque(s) por semana. Desmarca uno para cambiar.`, 
+        severity: 'warning' 
+      });
+      return; 
+    }
   }
 
-  setScheduledClasses(autoScheduled);
-  setMessage({ open: true, text: "Cronograma generado para todo el mes", severity: 'success' });
-};
+  // 4. Generación de clases (Sin fechas pasadas)
+  const finalSchedule = [];
+  const now = moment();
 
+  nextBases.forEach((base) => {
+    // Calculamos la fecha de "este" día en la semana actual
+    let startDate = moment().day(base.day);
+    
+    // Combinamos fecha y hora para comparar con el momento exacto actual
+    const startDateTime = moment(`${startDate.format('YYYY-MM-DD')} ${base.startTime}`, 'YYYY-MM-DD HH:mm:ss');
+
+    // REGLA: Si la fecha es de un día que ya pasó esta semana, 
+    // o es hoy pero la hora ya pasó, sumamos una semana.
+    if (startDateTime.isBefore(now)) {
+      startDate.add(1, 'weeks');
+    }
+
+    // Generamos las 4 clases para este bloque
+    for (let i = 0; i < 4; i++) {
+      finalSchedule.push({
+        id: `class-${base.day}-${base.startTime}-${i}`,
+        date: moment(startDate).add(i, 'weeks').format('YYYY-MM-DD'),
+        startTime: base.startTime,
+        endTime: base.endTime,
+        teacherId: selectedTeacher
+      });
+    }
+  });
+
+  // 5. Ordenamiento intercalado
+  // Al ordenar por fecha y luego por hora, si elegiste Lunes y Miércoles,
+  // la lista quedará: [Lun Sem1, Mie Sem1, Lun Sem2, Mie Sem2...]
+  finalSchedule.sort((a, b) => {
+    const timeA = moment(`${a.date} ${a.startTime}`);
+    const timeB = moment(`${b.date} ${b.startTime}`);
+    return timeA.diff(timeB);
+  });
+
+  setScheduledClasses(finalSchedule);
+};
 
   const fetchCities = async (countryName) => {
     if (!countryName) return;
