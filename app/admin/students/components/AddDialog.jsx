@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Dialog, DialogTitle, DialogContent, DialogActions, Typography,
   TextField, Button, Grid, MenuItem, CircularProgress, FormControlLabel, Switch,
@@ -38,18 +38,39 @@ const AddDialog = ({
   const [loadingCountries, setLoadingCountries] = useState(true);
   const [cities, setCities] = useState([]);
   const [loadingCities, setLoadingCities] = useState(false);
+  // Estados para el algoritmo de fases
+  const [currentPhase, setCurrentPhase] = useState(1);
+  const [totalPhases, setTotalPhases] = useState(1);
+  const [blocksPerWeek, setBlocksPerWeek] = useState(1);
+  const prevPackageIdRef = useRef(null);
+
 
   // Fetch teachers when the dialog opens
   useEffect(() => {
-    if (open) {
-      fetchTeachers();
-    }
-  }, [open]);
+        if (open) {
+          fetchTeachers();
+        }
+      }, [open]);
 
-  useEffect(() => {
-    // Si cambia el paquete, reiniciamos la selección para que coincida con el nuevo límite
-    setScheduledClasses([]);
-  }, [formData.package]);
+    useEffect(() => {
+    // Solo actuamos si el ID del paquete cambió realmente
+    if (formData.package && formData.package !== prevPackageIdRef.current) {
+      const selectedPkg = packages.find(pkg => pkg.id === formData.package);
+      
+      if (selectedPkg) {
+        const T = selectedPkg.totalClasses;
+        const S = selectedPkg.durationWeeks || 4;
+        const B = Math.ceil(T / S); // Bloques por semana (Fases)
+
+        setTotalPhases(B);
+        setCurrentPhase(1);
+        setScheduledClasses([]); // Limpiar al cambiar de paquete
+        
+        prevPackageIdRef.current = formData.package; // Guardamos en la referencia
+        console.log(`Paso 1 completado: Paquete ${selectedPkg.name}, Fases: ${B}`);
+      }
+    }
+  }, [formData.package, packages]);
 
 
   // Fetch teachers list
@@ -109,99 +130,46 @@ const AddDialog = ({
 // Dentro de AddDialog.jsx
 
 const handleSlotSelect = (slot) => {
-  if (!formData.package) {
-    setMessage({ open: true, text: translations.selectPackageFirst, severity: 'warning' });
-    return;
-  }
+  if (!formData.package) return;
 
-  // 1. Configuración del paquete
   const selectedPkg = packages.find(pkg => pkg.id === formData.package);
-  const totalClassesTarget = selectedPkg.totalClasses;
-  const maxSlotsPerWeek = totalClassesTarget / 4; 
+  const T = selectedPkg.totalClasses;
+  const S = selectedPkg.durationWeeks || 4;
+  const B = totalPhases; // El B calculado arriba
+  const P = currentPhase; // La fase actual
 
-  // 2. Identificar bloques base (Día y Hora) actualmente en el cronograma
-  const currentBasesMap = new Map();
-  scheduledClasses.forEach(cls => {
-    const dayName = moment(cls.date).format('dddd').toLowerCase();
-    const hour = cls.startTime.split(':')[0].padStart(2, '0');
-    const key = `${dayName}-${hour}`;
-    
-    if (!currentBasesMap.has(key)) {
-      currentBasesMap.set(key, {
-        day: dayName,
-        startTime: cls.startTime,
-        endTime: cls.endTime
-      });
-    }
-  });
-
-  const clickedHour = slot.start.split(':')[0].padStart(2, '0');
-  const clickedKey = `${slot.day}-${clickedHour}`;
-  
-  let nextBases = Array.from(currentBasesMap.values());
-
-  // 3. Lógica de Selección y Bloqueo
-  if (currentBasesMap.has(clickedKey)) {
-    // DESMARCAR: Si ya existe, lo quitamos
-    nextBases = nextBases.filter(b => `${b.day}-${b.startTime.split(':')[0].padStart(2, '0')}` !== clickedKey);
-  } else {
-    // MARCAR NUEVO:
-    if (nextBases.length < maxSlotsPerWeek) {
-      nextBases.push({ 
-        day: slot.day, 
-        startTime: slot.start, 
-        endTime: slot.end 
-      });
-    } else {
-      // BLOQUEO: Ya llegó al límite del paquete
-      setMessage({ 
-        open: true, 
-        text: `Límite alcanzado: Este paquete permite ${maxSlotsPerWeek} bloque(s) por semana. Desmarca uno para cambiar.`, 
-        severity: 'warning' 
-      });
-      return; 
-    }
+  // 1. Calcular fecha de inicio (siempre hacia adelante)
+  let firstDate = moment().day(slot.day);
+  const now = moment();
+  if (moment(`${firstDate.format('YYYY-MM-DD')} ${slot.start}`, 'YYYY-MM-DD HH:mm').isBefore(now)) {
+    firstDate.add(1, 'weeks');
   }
 
-  // 4. Generación de clases (Sin fechas pasadas)
-  const finalSchedule = [];
-  const now = moment();
+  // 2. Aplicación de la Fórmula y Proyección (Paso 2)
+  const phaseClasses = [];
+  for (let i = 0; i < S; i++) {
+    const classIndex = P + (i * B);
 
-  nextBases.forEach((base) => {
-    // Calculamos la fecha de "este" día en la semana actual
-    let startDate = moment().day(base.day);
-    
-    // Combinamos fecha y hora para comparar con el momento exacto actual
-    const startDateTime = moment(`${startDate.format('YYYY-MM-DD')} ${base.startTime}`, 'YYYY-MM-DD HH:mm:ss');
-
-    // REGLA: Si la fecha es de un día que ya pasó esta semana, 
-    // o es hoy pero la hora ya pasó, sumamos una semana.
-    if (startDateTime.isBefore(now)) {
-      startDate.add(1, 'weeks');
-    }
-
-    // Generamos las 4 clases para este bloque
-    for (let i = 0; i < 4; i++) {
-      finalSchedule.push({
-        id: `class-${base.day}-${base.startTime}-${i}`,
-        date: moment(startDate).add(i, 'weeks').format('YYYY-MM-DD'),
-        startTime: base.startTime,
-        endTime: base.endTime,
+    if (classIndex <= T) {
+      phaseClasses.push({
+        phase: P, // Identificador de fase
+        id: `temp-${P}-${i}`, // ID temporal para React
+        classNumber: classIndex,
+        date: moment(firstDate).add(i, 'weeks').format('YYYY-MM-DD'),
+        startTime: slot.start,
+        endTime: slot.end,
         teacherId: selectedTeacher
       });
     }
-  });
+  }
 
-  // 5. Ordenamiento intercalado
-  // Al ordenar por fecha y luego por hora, si elegiste Lunes y Miércoles,
-  // la lista quedará: [Lun Sem1, Mie Sem1, Lun Sem2, Mie Sem2...]
-  finalSchedule.sort((a, b) => {
-    const timeA = moment(`${a.date} ${a.startTime}`);
-    const timeB = moment(`${b.date} ${b.startTime}`);
-    return timeA.diff(timeB);
+  // 3. Filtro de Reemplazo (Paso 2)
+  setScheduledClasses(prev => {
+    // Quitamos lo que hubiera de esta fase anteriormente
+    const otherPhases = prev.filter(c => c.phase !== P);
+    // Añadimos lo nuevo y ordenamos por número de clase
+    return [...otherPhases, ...phaseClasses].sort((a, b) => a.classNumber - b.classNumber);
   });
-
-  setScheduledClasses(finalSchedule);
 };
 
   const fetchCities = async (countryName) => {
@@ -612,6 +580,61 @@ const handleAddStudent = async () => {
         
         {selectedTeacher && (
           <Box sx={{ mt: 4, p: 3, bgcolor: theme.mode === 'light' ? 'rgba(0, 120, 220, 0.05)' : 'rgba(0, 120, 220, 0.15)', borderRadius: 3 }}>
+              {formData.package && (
+                <Box sx={{ 
+                  mb: 3, p: 2, 
+                  bgcolor: theme.mode === 'light' ? '#f8f9fa' : '#1e1e2d', 
+                  borderRadius: 2, border: '2px solid #845EC2' 
+                }}>
+                  <Typography variant="subtitle1" fontWeight="bold" color="primary">
+                    {/* 1. Título dinámico según si es el último bloque o no */}
+                    {currentPhase === totalPhases 
+                      ? `Configurando Bloque Final (${currentPhase} de ${totalPhases})`
+                      : `Configurando Bloque Horario ${currentPhase} de ${totalPhases}`
+                    }
+                  </Typography>
+                  
+                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                    
+                    {/* 2. Botón SIEMPRE visible mientras no hayamos pasado al siguiente bloque */}
+                    {currentPhase < totalPhases ? (
+                      <Button 
+                        size="small" variant="contained" 
+                        // Solo habilitar si el usuario ya hizo clic en el calendario para esta fase
+                        disabled={!scheduledClasses.some(c => c.phase === currentPhase)}
+                        onClick={() => setCurrentPhase(prev => prev + 1)}
+                        sx={{ bgcolor: '#845EC2' }}
+                      >
+                        Siguiente Bloque
+                      </Button>
+                    ) : (
+                      // 3. En la fase final, mostramos un mensaje de estado en lugar de un botón de "Siguiente"
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {!scheduledClasses.some(c => c.phase === currentPhase) ? (
+                          <Typography variant="body2" sx={{ color: 'orange', fontWeight: 'bold' }}>
+                            ⚠️ Por favor, selecciona el horario en el calendario de abajo
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" sx={{ color: 'success.main', fontWeight: 'bold' }}>
+                            ✅ Horario completo. Puedes revisar la lista al final.
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                    
+                    {/* 4. Botón Atrás: Solo si no estamos en la primera fase */}
+                    {currentPhase > 1 && (
+                      <Button 
+                        size="small" 
+                        variant="outlined" 
+                        onClick={() => setCurrentPhase(prev => prev - 1)}
+                      >
+                        Atrás
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
+              )}
             <Typography variant="h6" sx={{ mb: 2, color: theme.text?.primary }}>{translations.teacherAvailability}</Typography>
             {loadingSchedule ? (<Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CircularProgress /></Box>) : teacherSchedule ? (
               <Box sx={{ height: '500px' }}><TeacherAvailabilityCalendar teacherSchedule={teacherSchedule} loading={loadingSchedule} onSlotSelect={handleSlotSelect} scheduledClasses={scheduledClasses} onAvailabilityValidation={handleAvailabilityValidation} /></Box>

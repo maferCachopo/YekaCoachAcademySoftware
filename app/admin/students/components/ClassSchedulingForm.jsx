@@ -44,6 +44,7 @@ const ClassSchedulingForm = memo(({
       try {
         const packageData = await packageAPI.getPackageById(packageId);
         setPackageDetails(packageData);
+        
         if (studentId) {
           const studentPackages = await studentAPI.getStudentPackages(studentId);
           const activePackage = studentPackages.find(p => 
@@ -107,12 +108,19 @@ const ClassSchedulingForm = memo(({
 
   useEffect(() => {
     if (!packageId) return;
-    if (scheduledClasses.length > 0 && existingClasses?.length === 0) return;
 
-    let initialClasses = [];
-    if (existingClasses?.length > 0) {
+    // --- PROTECCIÓN DEL ALGORITMO ---
+    // Si scheduledClasses ya tiene datos (creados por el clic en el calendario),
+    // y no estamos cargando datos viejos de la DB, NO HACEMOS NADA. 
+    // Esto evita que este efecto "limpie" el array al renderizar.
+    if (scheduledClasses.length > 0 && (!existingClasses || existingClasses.length === 0)) {
+      return;
+    }
+
+    // Solo inicializar si hay clases existentes (Modo Edición)
+    if (existingClasses && existingClasses.length > 0) {
       const scheduledExistingClasses = existingClasses.filter(cls => cls.status === 'scheduled');
-      initialClasses = scheduledExistingClasses.map(cls => ({
+      const initialClasses = scheduledExistingClasses.map(cls => ({
         id: cls.id,
         classId: cls.classId,
         date: cls.classDetail?.date ? moment(cls.classDetail.date).format('YYYY-MM-DD') : '',
@@ -120,59 +128,27 @@ const ClassSchedulingForm = memo(({
         endTime: cls.classDetail?.endTime || '',
         status: cls.status || 'scheduled'
       }));
-    } else {
-      packageAPI.getPackageById(packageId).then(packageData => {
-        if (packageData && packageData.totalClasses) {
-          const newClasses = [];
-          for (let i = 0; i < packageData.totalClasses; i++) {
-            newClasses.push({
-              id: `class-${i}`,
-              date: '',
-              startTime: '',
-              endTime: '',
-              teacherId: teacherId || undefined,
-            });
-          }
-          setScheduledClasses(newClasses);
-        }
-      });
-      return;
+
+      // Solo actualizar si el contenido es realmente diferente
+      if (JSON.stringify(initialClasses) !== JSON.stringify(scheduledClasses)) {
+        setScheduledClasses(initialClasses);
+      }
     }
-    setScheduledClasses(initialClasses);
-  }, [packageId, existingClasses, setScheduledClasses]);
+    // Eliminamos el "else setScheduledClasses([])" para que no limpie por error
+  }, [packageId, existingClasses]); 
 
   //automatizar el añadir las clases a partir de la primera clase 
 
 const handleChangeClass = useCallback((index, field, value) => {
   setScheduledClasses(prev => {
     const updated = [...prev];
-    
-    // Actualizar el valor actual
+    // Actualizar solo la clase que el usuario está editando manualmente
     updated[index] = { 
       ...updated[index], 
       [field]: value,
       timezone: ADMIN_TIMEZONE,
       teacherId: teacherId || updated[index].teacherId 
     };
-
-    // --- AUTOMATIZACIÓN ---
-    // Si estamos editando la CLASE 1 (index 0) y cambiamos Fecha u Hora
-    if (index === 0 && (field === 'date' || field === 'startTime' || field === 'endTime')) {
-      const firstClass = updated[0];
-      
-      // Solo propagar si la primera clase tiene los datos mínimos
-      if (firstClass.date && firstClass.startTime) {
-        for (let i = 1; i < updated.length; i++) {
-          // Sumar i semanas a la fecha de la clase 1
-          updated[i].date = moment(firstClass.date).add(i, 'weeks').format('YYYY-MM-DD');
-          updated[i].startTime = firstClass.startTime;
-          // Si no hay endTime, se asume 1 hora después o el mismo que la clase 1
-          updated[i].endTime = firstClass.endTime || moment(firstClass.startTime, 'HH:mm').add(1, 'hour').format('HH:mm');
-          updated[i].teacherId = firstClass.teacherId || teacherId;
-          updated[i].timezone = ADMIN_TIMEZONE;
-        }
-      }
-    }
     
     return updated.map(cls => ({
       ...cls,
