@@ -79,47 +79,47 @@ export default function TeacherSchedule() {
 
   // Lógica de visualización de la Matriz
   const getSlotStatus = (dayName, hour) => {
-    if (!teacherData) return { type: 'empty' };
+  if (!teacherData) return { type: 'empty' };
 
-    // --- 1. BUSCAR ASIGNACIÓN PERMANENTE (Fixed Slots del Estudiante) ---
-    // Buscamos si algún estudiante asignado tiene este día/hora en su 'weeklySchedule'
-     const permanentStudent = teacherData.assignedStudents?.find(student => 
-      student.fixedSchedule?.some(slot => 
-        slot.day.toLowerCase() === dayName.toLowerCase() && 
-        parseInt(slot.hour) === hour
-      )
-    );
+  // --- 1. BUSCAR ASIGNACIÓN PERMANENTE desde fixedSchedule ---
+  const permanentStudent = teacherData.assignedStudents?.find(student => 
+    student.fixedSchedule?.some(slot => 
+      slot.day.toLowerCase() === dayName.toLowerCase() && 
+      parseInt(slot.hour) === hour
+    )
+  );
 
-    if (permanentStudent) {
-      return { 
-         type: 'fixed', 
-        label: `Asignación Fija: ${permanentStudent.fullName}`, 
-        data: { name: permanentStudent.fullName }  
-      };
-    }
+  if (permanentStudent) {
+    return { 
+      type: 'fixed', 
+      label: `Asignación Fija: ${permanentStudent.fullName}`, 
+      data: { name: permanentStudent.fullName }  
+    };
+  }
 
-    // --- 2. BUSCAR CLASE PROGRAMADA (Puntual de esta semana) ---
-    const classAt = teacherData.classes?.find(c => {
-        const dayOfClass = format(new Date(c.date + 'T00:00:00'), 'EEEE').toLowerCase();
-        return dayOfClass === dayName && parseInt(c.startTime.split(':')[0]) === hour;
-    });
-    if (classAt) return { type: 'class', label: `Clase Programada: ${classAt.studentName}`, data: classAt };
+  // --- 2. BUSCAR CLASE PROGRAMADA de esta semana ---
+  // Usamos startTime (hora admin) para comparar con la hora de la grilla
+  const classAt = teacherData.classes?.find(c => {
+    const dayOfClass = format(new Date(c.date + 'T00:00:00'), 'EEEE').toLowerCase();
+    return dayOfClass === dayName && parseInt(c.startTime.split(':')[0]) === hour;
+  });
+  if (classAt) return { type: 'class', label: `Clase: ${classAt.studentName} ${classAt.studentSurname || ''}`.trim(), data: classAt };
 
-    // --- 3. HORARIO LABORAL Y DESCANSOS DEL PROFESOR ---
-    const workHours = teacherData.workHours?.[dayName] || [];
-    const breakHours = teacherData.breakHours?.[dayName] || [];
-    const workingDays = teacherData.workingDays || [];
+  // --- 3. HORARIO LABORAL Y DESCANSOS ---
+  const workHours = teacherData.workHours?.[dayName] || [];
+  const breakHours = teacherData.breakHours?.[dayName] || [];
+  const workingDays = teacherData.workingDays || [];
 
-    if (!workingDays.includes(dayName)) return { type: 'non-working', label: 'Día no laboral' };
+  if (!workingDays.includes(dayName)) return { type: 'non-working', label: 'Día no laboral' };
 
-    const isInWork = workHours.some(w => hour >= parseInt(w.start.split(':')[0]) && hour < parseInt(w.end.split(':')[0]));
-    const isInBreak = breakHours.some(b => hour >= parseInt(b.start.split(':')[0]) && hour < parseInt(b.end.split(':')[0]));
+  const isInWork = workHours.some(w => hour >= parseInt(w.start.split(':')[0]) && hour < parseInt(w.end.split(':')[0]));
+  const isInBreak = breakHours.some(b => hour >= parseInt(b.start.split(':')[0]) && hour < parseInt(b.end.split(':')[0]));
 
-    if (isInBreak) return { type: 'break', label: 'Descanso (Break)' };
-    if (isInWork) return { type: 'available', label: 'Disponible para clases' };
+  if (isInBreak) return { type: 'break', label: 'Descanso (Break)' };
+  if (isInWork) return { type: 'available', label: 'Disponible para clases' };
 
-    return { type: 'non-working', label: 'Fuera de jornada' };
-  };
+  return { type: 'non-working', label: 'Fuera de jornada' };
+};
 
   const currentTeacher = allTeachers[currentTeacherIndex];
 
@@ -237,8 +237,12 @@ export default function TeacherSchedule() {
                           {status.type === 'fixed' && (
                             <Box sx={{ color: 'white', textAlign: 'center' }}>
                               <PinIcon sx={{ fontSize: '0.7rem', mb: -0.2 }} />
-                              <Typography sx={{ fontSize: '0.6rem', fontWeight: 'bold' }}>FIJO</Typography>
                               <Typography sx={{ fontSize: '0.65rem' }} noWrap>{status.data.name}</Typography>
+                                {status.data.packageName && (
+                                  <Typography sx={{ fontSize: '0.55rem', opacity: 0.85, fontStyle: 'italic' }} noWrap>
+                                    {status.data.packageName}
+                                  </Typography>
+                                )}
                             </Box>
                           )}
                           {status.type === 'class' && (

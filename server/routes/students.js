@@ -120,7 +120,8 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { packageId, classes, teacherId } = req.body; 
+    const { packageId, classes, teacherId, weeklySchedule: clientWeeklySchedule } = req.body;
+    // ↑ Renombramos el del cliente para evitar conflicto con el que calcularemos
 
     const studentPackage = await StudentPackage.findOne({
       where: { studentId: id, packageId, status: 'active' }
@@ -155,28 +156,48 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
 
     await StudentClass.bulkCreate(scheduledClasses, { transaction: t });
 
-    // --- INICIO DE MODIFICACIÓN: GUARDAR HORARIO FIJO ---
-    // Extraemos los días y horas únicos para que el nombre del alumno aparezca siempre en el cronograma
-    const weeklySchedule = classes.map(cls => ({
-      day: moment(cls.date).format('dddd').toLowerCase(),
-      hour: parseInt(cls.startTime.split(':')[0]),
-      startTime: cls.startTime,
-      endTime: cls.endTime
-    })).filter((v, i, a) => a.findIndex(t => (
-       t.day === v.day && t.hour === v.hour
-    )) === i);
+    // --- GUARDAR HORARIO FIJO EN TeacherStudents ---
+    // Priorizamos el weeklySchedule que viene del frontend (ya calculado por ClassSchedulingForm).
+    // Si no viene, lo calculamos nosotros desde las clases como fallback.
+    const weeklyScheduleToSave = (clientWeeklySchedule && clientWeeklySchedule.length > 0)
+      ? clientWeeklySchedule
+      : classes
+          .filter(cls => cls.date && cls.startTime)
+          .map(cls => ({
+            day: moment(cls.date).format('dddd').toLowerCase(),
+            hour: parseInt(cls.startTime.split(':')[0]),
+            startTime: cls.startTime,
+            endTime: cls.endTime
+          }))
+          .filter((slot, index, arr) =>
+            // Deduplicar: un slot por combinación día+hora
+            arr.findIndex(s => s.day === slot.day && s.hour === slot.hour) === index
+          );
 
-    // Actualizamos la relación para que el profesor vea al alumno en esos bloques específicos
-    if (teacherId) {
-      await TeacherStudent.update(
-        { weeklySchedule: weeklySchedule },
-        { 
-          where: { studentId: id, teacherId: teacherId },
-          transaction: t 
-        }
-      );
+    if (teacherId && weeklyScheduleToSave.length > 0) {
+      // Buscamos el registro activo de la relación profesor-estudiante
+      const teacherStudentRecord = await TeacherStudent.findOne({
+        where: { studentId: id, teacherId, active: true },
+        transaction: t
+      });
+
+      if (teacherStudentRecord) {
+        await teacherStudentRecord.update(
+          { weeklySchedule: weeklyScheduleToSave },
+          { transaction: t }
+        );
+      } else {
+        // Si aún no existe la relación (el AddDialog la crea después), la creamos aquí
+        await TeacherStudent.create({
+          teacherId,
+          studentId: id,
+          active: true,
+          assignedDate: new Date(),
+          weeklySchedule: weeklyScheduleToSave
+        }, { transaction: t });
+      }
     }
-    // --- FIN DE MODIFICACIÓN ---
+    // --- FIN GUARDAR HORARIO FIJO ---
 
     await studentPackage.update({
       remainingClasses: scheduledClasses.length
@@ -185,8 +206,10 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
     await t.commit();
     return res.status(201).json({ 
       message: 'Schedule created and fixed hours saved', 
-      count: scheduledClasses.length 
+      count: scheduledClasses.length,
+      weeklySchedule: weeklyScheduleToSave  // Devolvemos para debug/confirmación
     });
+
   } catch (error) {
     if (t) await t.rollback();
     console.error('Schedule error:', error);

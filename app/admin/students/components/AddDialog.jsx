@@ -39,6 +39,7 @@ const getFirstOccurrence = (startDate, slot) => {
   const now = moment().tz(ADMIN_TIMEZONE);
   const targetDay = DAY_MAP[slot.day.toLowerCase()];
   const [slotHour, slotMin] = slot.start.split(':').map(Number);
+  const [weeklyScheduleSlots, setWeeklyScheduleSlots] = useState([]);
 
   // Empezar desde el inicio de startDate
   let candidate = moment(startDate).tz(ADMIN_TIMEZONE).startOf('day');
@@ -450,13 +451,15 @@ const AddDialog = ({
 
           await fetchWithAuth(`/teachers/${selectedTeacher}/students`, {
             method: 'POST',
-            body: JSON.stringify({ studentId, weeklySchedule: uniqueWeeklySchedule })
+            body: JSON.stringify({ studentId, weeklySchedule: weeklyScheduleSlots })
+
           });
         }
 
         const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime && !cls.isPreview);
         await studentAPI.scheduleClasses(studentId, {
           packageId: formData.package,
+          weeklySchedule: weeklyScheduleSlots,
           classes: validClasses.map(cls => ({ ...cls, teacherId: selectedTeacher }))
         });
 
@@ -784,6 +787,7 @@ const AddDialog = ({
               packageId={formData.package}
               teacherId={selectedTeacher}
               teacherValidationFn={teacherValidationFn}
+              onScheduleChange={setWeeklyScheduleSlots}
             />
           </Box>
         )}
