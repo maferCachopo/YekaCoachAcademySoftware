@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef , useCallback} from 'react';
 import {
   Box, Dialog, DialogTitle, DialogContent, DialogActions, Typography,
   TextField, Button, Grid, MenuItem, CircularProgress, FormControlLabel, Switch,
@@ -39,7 +39,8 @@ const getFirstOccurrence = (startDate, slot) => {
   const now = moment().tz(ADMIN_TIMEZONE);
   const targetDay = DAY_MAP[slot.day.toLowerCase()];
   const [slotHour, slotMin] = slot.start.split(':').map(Number);
-  const [weeklyScheduleSlots, setWeeklyScheduleSlots] = useState([]);
+   
+
 
   // Empezar desde el inicio de startDate
   let candidate = moment(startDate).tz(ADMIN_TIMEZONE).startOf('day');
@@ -157,6 +158,7 @@ const AddDialog = ({
   const [loadingCountries, setLoadingCountries] = useState(true);
   const [cities, setCities] = useState([]);
   const [loadingCities, setLoadingCities] = useState(false);
+  const [weeklyScheduleSlots, setWeeklyScheduleSlots] = useState([]);
 
   // Estados para el algoritmo de fases
   const [currentPhase, setCurrentPhase] = useState(1);
@@ -188,6 +190,10 @@ const AddDialog = ({
       prevPackageIdRef.current = null;
     }
   }, [open]);
+
+    const handleScheduleChange = useCallback((slots) => {
+    setWeeklyScheduleSlots(slots);
+     }, []);
 
   // ─── Cuando cambia el paquete: recalcular fases ───
   useEffect(() => {
@@ -418,7 +424,8 @@ const AddDialog = ({
         city: formData.city || '',
         country: formData.country || '',
         zoomLink: formData.zoomLink || '',
-        allowDifferentTeacher: formData.allowDifferentTeacher || false
+        allowDifferentTeacher: formData.allowDifferentTeacher || false,
+        weeklySchedule: weeklyScheduleSlots 
       };
 
       const response = await authAPI.register(userData);
@@ -787,7 +794,7 @@ const AddDialog = ({
               packageId={formData.package}
               teacherId={selectedTeacher}
               teacherValidationFn={teacherValidationFn}
-              onScheduleChange={setWeeklyScheduleSlots}
+              onScheduleChange={handleScheduleChange} 
             />
           </Box>
         )}

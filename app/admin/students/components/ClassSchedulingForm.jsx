@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import {
   Box, Typography, Button, TextField, IconButton, Grid, Alert
 } from '@mui/material';
@@ -32,6 +32,25 @@ const ClassSchedulingForm = memo(({
   const { theme } = useTheme();
   const { translations } = useLanguage();
   const isFirstRender = useRef(true);
+  const prevSlotsRef = useRef(""); 
+
+
+  const fixedScheduleSlots = useMemo(() => {
+  const seen = new Set();
+  return scheduledClasses
+    .filter(c => c.date && c.startTime)
+    .map(c => {
+      const day = moment(c.date).format('dddd').toLowerCase();
+      const hour = parseInt(c.startTime.split(':')[0]);
+      return { day, hour, startTime: c.startTime, endTime: c.endTime };
+    })
+    .filter(slot => {
+      const key = `${slot.day}-${slot.hour}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}, [scheduledClasses]);
 
 
     // Notificar al padre los slots fijos cuando cambien las clases
@@ -51,7 +70,12 @@ const ClassSchedulingForm = memo(({
           seen.add(key);
           return true;
         });
-      onScheduleChange(slots);
+
+      const currentSlotsString = JSON.stringify(slots);
+      if (prevSlotsRef.current !== currentSlotsString) {
+        prevSlotsRef.current = currentSlotsString;
+        onScheduleChange(slots);
+      }
     }
   }, [scheduledClasses, onScheduleChange]);
 
@@ -199,24 +223,6 @@ const handleChangeClass = useCallback((index, field, value) => {
   const maxClasses = packageDetails?.totalClasses || 0;
   const canAddMore = scheduledClasses.length < maxClasses;
   const isComplete = scheduledClasses.length === maxClasses && scheduledClasses.every(c => c.date && c.startTime && c.endTime);
-  // Calcular los días únicos con hora seleccionados — para que el padre los use
-// Esto reemplaza al useEffect de getDayName que ya existe
-const fixedScheduleSlots = useMemo(() => {
-  const seen = new Set();
-  return scheduledClasses
-    .filter(c => c.date && c.startTime)
-    .map(c => {
-      const day = moment(c.date).format('dddd').toLowerCase();
-      const hour = parseInt(c.startTime.split(':')[0]);
-      return { day, hour, startTime: c.startTime, endTime: c.endTime };
-    })
-    .filter(slot => {
-      const key = `${slot.day}-${slot.hour}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}, [scheduledClasses]);
 
 
   return (
