@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef , useCallback} from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Dialog, DialogTitle, DialogContent, DialogActions, Typography,
   TextField, Button, Grid, MenuItem, CircularProgress, FormControlLabel, Switch,
@@ -7,7 +7,13 @@ import {
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { Add as AddIcon, Event as EventIcon, CalendarMonth as CalendarIcon, AutoFixHigh as GenerateIcon } from '@mui/icons-material';
+import { 
+  Add as AddIcon, 
+  Event as EventIcon, 
+  CalendarMonth as CalendarIcon, 
+  AutoFixHigh as GenerateIcon, 
+  Public as GlobeIcon 
+} from '@mui/icons-material'; // <--- IMPORTACIÓN CORREGIDA AQUÍ
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import { authAPI, studentAPI, packageAPI, adminAPI } from '../../../utils/api';
@@ -18,7 +24,7 @@ import { fetchWithAuth } from '../../../utils/api';
 import moment from 'moment';
 import 'moment-timezone';
 import { ADMIN_TIMEZONE } from '../../../utils/constants';
-
+import { getAllCountries, getTimezonesForCountry } from 'countries-and-timezones';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UTILIDADES DE GENERACIÓN DE FECHAS
@@ -159,6 +165,10 @@ const AddDialog = ({
   const [cities, setCities] = useState([]);
   const [loadingCities, setLoadingCities] = useState(false);
   const [weeklyScheduleSlots, setWeeklyScheduleSlots] = useState([]);
+  const [timezone, setTimezone] = useState('America/Caracas');
+  const [availableTimezones, setAvailableTimezones] = useState(moment.tz.names());
+  const [searchOptions, setSearchOptions] = useState([]); // Opciones del desplegable
+  const [isFetching, setIsFetching] = useState(false); // Estado de carga
 
   // Estados para el algoritmo de fases
   const [currentPhase, setCurrentPhase] = useState(1);
@@ -171,10 +181,13 @@ const AddDialog = ({
 
   const prevPackageIdRef = useRef(null);
 
+  const [usernameError, setUsernameError] = useState('');
+
   // ─── Fetch teachers cuando abre el dialog ───
   useEffect(() => {
     if (open) {
       fetchTeachers();
+      setUsernameError('');
     }
   }, [open]);
 
@@ -190,6 +203,47 @@ const AddDialog = ({
       prevPackageIdRef.current = null;
     }
   }, [open]);
+
+
+  // 1. Cuando cambia el país, filtrar zonas horarias
+  useEffect(() => {
+    if (formData.country) {
+      const countries = getAllCountries();
+      const countryEntry = Object.values(countries).find(
+        c => c.name.toLowerCase() === formData.country.toLowerCase()
+      );
+
+      if (countryEntry) {
+        const zones = getTimezonesForCountry(countryEntry.id);
+        if (zones && zones.length > 0) {
+          const zoneNames = zones.map(z => z.name);
+          setAvailableTimezones(zoneNames);
+
+          // Si el país solo tiene una zona, se asigna automáticamente
+          if (zoneNames.length === 1) {
+            setTimezone(zoneNames[0]);
+          }
+        }
+      } else {
+        setAvailableTimezones(moment.tz.names());
+      }
+    } else {
+      setAvailableTimezones(moment.tz.names());
+    }
+  }, [formData.country]);
+
+  // 2. Cuando cambia la ciudad, intentar predecir la zona dentro de las disponibles
+  useEffect(() => {
+    if (formData.city && formData.city.length > 3) {
+      const normalizedCity = formData.city.toLowerCase().replace(/\s+/g, '_');
+      const matchedZone = availableTimezones.find(tz => 
+        tz.toLowerCase().includes(normalizedCity)
+      );
+      if (matchedZone) {
+        setTimezone(matchedZone);
+      }
+    }
+  }, [formData.city, availableTimezones]);
 
     const handleScheduleChange = useCallback((slots) => {
     setWeeklyScheduleSlots(slots);
@@ -214,6 +268,7 @@ const AddDialog = ({
     }
   }, [formData.package, packages]);
 
+  
   const fetchTeachers = async () => {
     try {
       const response = await fetchWithAuth('/teachers');
@@ -237,6 +292,47 @@ const AddDialog = ({
       setLoadingSchedule(false);
     }
   };
+
+  const handleTimezoneSearch = async (query) => {
+  if (query.length < 3) return; // Buscar solo si hay más de 3 letras
+
+  setIsFetching(true);
+  try {
+    // 1. Buscamos ciudades por el nombre ingresado
+    const res = await fetch(`https://api.teleport.org/api/cities/?search=${query}`);
+    const data = await res.json();
+    
+    // 2. Formateamos los resultados para el Autocomplete
+    const results = data._embedded['city:search-results'].map(item => ({
+      label: item.matching_full_name, // Ej: "Miami, Florida, United States"
+      detailsUrl: item._links['city:item'].href // Link para obtener el timezone
+    }));
+
+    setSearchOptions(results);
+  } catch (error) {
+    console.error("Error buscando ciudades:", error);
+  } finally {
+    setIsFetching(false);
+  }
+};
+
+// Función para obtener el timezone real cuando el usuario selecciona una ciudad
+const handleSelectCity = async (cityItem) => {
+  if (!cityItem) return;
+
+  try {
+    const res = await fetch(cityItem.detailsUrl);
+    const data = await res.json();
+    
+    // Extraemos la zona horaria oficial (IANA)
+    const ianaTimezone = data._links['city:timezone'].name; // Ej: "America/New_York"
+    setTimezone(ianaTimezone);
+  } catch (error) {
+    console.error("Error obteniendo zona horaria:", error);
+  }
+};
+
+
 
   const handleTeacherChange = (e) => {
     const teacherId = e.target.value;
@@ -359,6 +455,7 @@ const AddDialog = ({
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'username') setUsernameError('');
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -423,6 +520,7 @@ const AddDialog = ({
         phone: formData.phone || '',
         city: formData.city || '',
         country: formData.country || '',
+        timezone: timezone,
         zoomLink: formData.zoomLink || '',
         allowDifferentTeacher: formData.allowDifferentTeacher || false,
         weeklySchedule: weeklyScheduleSlots 
@@ -475,12 +573,23 @@ const AddDialog = ({
         onClose();
       }
     } catch (error) {
-      console.error('Error al guardar:', error);
-      setMessage({ open: true, text: error.message, severity: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
+        console.error('Error al guardar estudiante:', error);
+        
+        // Si el error es 409 (Conflicto) o el mensaje indica que ya existe
+        if (error.status === 409 || error.message.toLowerCase().includes('exists')) {
+          setUsernameError('Este nombre de usuario ya está en uso, no lo puedes usar');
+          
+          // Vaciamos solo el nombre de usuario, manteniendo todo lo demás intacto
+          setFormData(prev => ({ ...prev, username: '' })); 
+          
+          setMessage({ open: true, text: 'Error: El usuario ya existe', severity: 'error' });
+        } else {
+          setMessage({ open: true, text: error.message, severity: 'error' });
+        }
+      } finally {
+        setLoading(false);
+      }
+   };
 
   // ─── Derivados para UI ───
   const selectedPkg = packages.find(pkg => pkg.id === formData.package);
@@ -515,7 +624,7 @@ const AddDialog = ({
           <Grid item xs={12} sm={6}><TextField label={translations.lastName} name="surname" value={formData.surname} onChange={handleFormChange} fullWidth required variant="outlined" sx={{ ...textFieldStyle(theme), mt: 0 }} /></Grid>
           <Grid item xs={12} sm={6}><TextField label={translations.birthDate} name="birthDate" type="date" value={formData.birthDate || ''} onChange={handleFormChange} fullWidth variant="outlined" InputLabelProps={{ shrink: true }} sx={{ ...textFieldStyle(theme), mt: 0 }} /></Grid>
           <Grid item xs={12} sm={6}><TextField label={translations.email} name="email" type="email" value={formData.email} onChange={handleFormChange} fullWidth required variant="outlined" sx={{ ...textFieldStyle(theme), mt: 0 }} /></Grid>
-          <Grid item xs={12} sm={6}><TextField label={translations.username} name="username" value={formData.username} onChange={handleFormChange} fullWidth required variant="outlined" sx={{ ...textFieldStyle(theme), mt: 0 }} /></Grid>
+          <Grid item xs={12} sm={6}><TextField label={translations.username} name="username" value={formData.username} onChange={handleFormChange} fullWidth required variant="outlined" error={!!usernameError} helperText={usernameError} sx={{ ...textFieldStyle(theme), mt: 0 }} /></Grid>
           <Grid item xs={12} sm={6}><TextField label={translations.password} name="password" type="password" value={formData.password} onChange={handleFormChange} fullWidth required variant="outlined" sx={{ ...textFieldStyle(theme), mt: 0 }} /></Grid>
           <Grid item xs={12} sm={6}><TextField label={translations.confirmPassword} name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleFormChange} fullWidth required variant="outlined" sx={{ ...textFieldStyle(theme), mt: 0 }} /></Grid>
 
@@ -600,6 +709,30 @@ const AddDialog = ({
               )}
             />
           </Grid>
+ 
+         <Grid item xs={12}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+               <GlobeIcon sx={{ color: '#845EC2' }} />
+               <Typography variant="subtitle2" fontWeight="bold">Zona Horaria del Estudiante</Typography>
+            </Box>
+            <Autocomplete
+              options={availableTimezones}
+              value={timezone}
+              onChange={(event, newValue) => {
+                if (newValue) setTimezone(newValue);
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Seleccionar Zona Horaria"
+                  variant="outlined"
+                  sx={textFieldStyle(theme)}
+                  helperText="Se ajusta automáticamente según el País y Ciudad seleccionados"
+                />
+              )}
+            />
+          </Grid>
+             
 
           {/* Paquete */}
           <Grid item xs={12} sm={6}>

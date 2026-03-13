@@ -226,7 +226,8 @@ router.post('/register-student', async (req, res) => {
       city,
       country,
       zoomLink,
-      allowDifferentTeacher
+      allowDifferentTeacher,
+      timezone
     } = req.body;
     
     // Validate input
@@ -261,7 +262,7 @@ router.post('/register-student', async (req, res) => {
       password,
       email,
       role: 'student',
-      timezone: 'UTC'
+      timezone: timezone || 'America/Caracas'
     });
     
     console.log('DEBUG - User created:', {
