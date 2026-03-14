@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import {
-  Box, Typography, Button, TextField, IconButton, Grid, Alert
+  Box, Typography, Grid, Alert, Chip
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Check as CheckIcon, Warning as WarningIcon } from '@mui/icons-material';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterMoment } from '@mui/x-date-pickers/AdapterMoment';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import {
+  CalendarMonth as CalendarIcon,
+  AccessTime as TimeIcon,
+  CheckCircle as CheckIcon,
+  Warning as WarningIcon
+} from '@mui/icons-material';
 import moment from 'moment';
 import 'moment-timezone';
-import { textFieldStyle } from '../utils/styles';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import { packageAPI, studentAPI } from '../../../utils/api';
@@ -32,28 +32,27 @@ const ClassSchedulingForm = memo(({
   const { theme } = useTheme();
   const { translations } = useLanguage();
   const isFirstRender = useRef(true);
-  const prevSlotsRef = useRef(""); 
+  const prevSlotsRef = useRef('');
 
-
+  // ── Calcular slots fijos únicos (para notificar al padre) ──
   const fixedScheduleSlots = useMemo(() => {
-  const seen = new Set();
-  return scheduledClasses
-    .filter(c => c.date && c.startTime)
-    .map(c => {
-      const day = moment(c.date).format('dddd').toLowerCase();
-      const hour = parseInt(c.startTime.split(':')[0]);
-      return { day, hour, startTime: c.startTime, endTime: c.endTime };
-    })
-    .filter(slot => {
-      const key = `${slot.day}-${slot.hour}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}, [scheduledClasses]);
+    const seen = new Set();
+    return scheduledClasses
+      .filter(c => c.date && c.startTime)
+      .map(c => {
+        const day = moment(c.date).format('dddd').toLowerCase();
+        const hour = parseInt(c.startTime.split(':')[0]);
+        return { day, hour, startTime: c.startTime, endTime: c.endTime };
+      })
+      .filter(slot => {
+        const key = `${slot.day}-${slot.hour}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [scheduledClasses]);
 
-
-    // Notificar al padre los slots fijos cuando cambien las clases
+  // ── Notificar al padre los slots cuando cambien ──
   useEffect(() => {
     if (onScheduleChange) {
       const seen = new Set();
@@ -79,7 +78,7 @@ const ClassSchedulingForm = memo(({
     }
   }, [scheduledClasses, onScheduleChange]);
 
-
+  // ── Fetch package details ──
   useEffect(() => {
     const fetchPackageDetails = async () => {
       if (!packageId) return;
@@ -87,10 +86,9 @@ const ClassSchedulingForm = memo(({
       try {
         const packageData = await packageAPI.getPackageById(packageId);
         setPackageDetails(packageData);
-        
         if (studentId) {
           const studentPackages = await studentAPI.getStudentPackages(studentId);
-          const activePackage = studentPackages.find(p => 
+          const activePackage = studentPackages.find(p =>
             p.packageId === Number(packageId) && p.status === 'active'
           );
           if (activePackage) setStudentPackage(activePackage);
@@ -104,12 +102,10 @@ const ClassSchedulingForm = memo(({
     fetchPackageDetails();
   }, [packageId, studentId]);
 
+  // ── Validación ──
   useEffect(() => {
     if (!packageDetails) return;
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
     validateClasses();
   }, [scheduledClasses, packageDetails, studentPackage, teacherValidationFn]);
 
@@ -117,8 +113,10 @@ const ClassSchedulingForm = memo(({
     if (!packageDetails) return;
     const newErrors = [];
     const packageStartDate = studentPackage ? moment(studentPackage.startDate) : moment();
-    const packageEndDate = studentPackage ? moment(studentPackage.endDate) : moment().add(packageDetails.durationMonths || 6, 'months');
-    
+    const packageEndDate = studentPackage
+      ? moment(studentPackage.endDate)
+      : moment().add(packageDetails.durationMonths || 6, 'months');
+
     scheduledClasses.forEach((classItem, index) => {
       if (!classItem.date) return;
       const classDate = moment(classItem.date);
@@ -133,7 +131,7 @@ const ClassSchedulingForm = memo(({
           newErrors.push({ index, message: `Class must be before package end date (${packageEndDate.format('YYYY-MM-DD')})` });
         }
       }
-      const duplicates = scheduledClasses.filter((c, i) => 
+      const duplicates = scheduledClasses.filter((c, i) =>
         i !== index && c.date === classItem.date && c.startTime === classItem.startTime
       );
       if (duplicates.length > 0) {
@@ -149,18 +147,12 @@ const ClassSchedulingForm = memo(({
     setErrors(newErrors);
   };
 
+  // ── Cargar clases existentes (modo edición) ──
   useEffect(() => {
     if (!packageId) return;
-
-    // --- PROTECCIÓN DEL ALGORITMO ---
-    // Si scheduledClasses ya tiene datos (creados por el clic en el calendario),
-    // y no estamos cargando datos viejos de la DB, NO HACEMOS NADA. 
-    // Esto evita que este efecto "limpie" el array al renderizar.
     if (scheduledClasses.length > 0 && (!existingClasses || existingClasses.length === 0)) {
       return;
     }
-
-    // Solo inicializar si hay clases existentes (Modo Edición)
     if (existingClasses && existingClasses.length > 0) {
       const scheduledExistingClasses = existingClasses.filter(cls => cls.status === 'scheduled');
       const initialClasses = scheduledExistingClasses.map(cls => ({
@@ -171,124 +163,158 @@ const ClassSchedulingForm = memo(({
         endTime: cls.classDetail?.endTime || '',
         status: cls.status || 'scheduled'
       }));
-
-      // Solo actualizar si el contenido es realmente diferente
       if (JSON.stringify(initialClasses) !== JSON.stringify(scheduledClasses)) {
         setScheduledClasses(initialClasses);
       }
     }
-    // Eliminamos el "else setScheduledClasses([])" para que no limpie por error
-  }, [packageId, existingClasses]); 
-
-  //automatizar el añadir las clases a partir de la primera clase 
-
-const handleChangeClass = useCallback((index, field, value) => {
-  setScheduledClasses(prev => {
-    const updated = [...prev];
-    // Actualizar solo la clase que el usuario está editando manualmente
-    updated[index] = { 
-      ...updated[index], 
-      [field]: value,
-      timezone: ADMIN_TIMEZONE,
-      teacherId: teacherId || updated[index].teacherId 
-    };
-    
-    return updated.map(cls => ({
-      ...cls,
-      dayName: cls.date ? moment(cls.date).format('dddd').toLowerCase() : null
-    }));
-  });
-}, [setScheduledClasses, teacherId]);
-
-  const handleAddClass = useCallback(() => {
-    if (!packageDetails) return;
-    const maxClassesAllowed = packageDetails.totalClasses;
-    if (scheduledClasses.length >= maxClassesAllowed) return;
-
-    setScheduledClasses(prev => [...prev, {
-      id: `class-${prev.length}`,
-      date: '',
-      startTime: '',
-      endTime: '',
-      teacherId: teacherId || undefined,
-    }]);
-  }, [packageDetails, scheduledClasses, setScheduledClasses, teacherId]);
-
-  const handleRemoveClass = useCallback((index) => {
-    setScheduledClasses(prev => prev.filter((_, i) => i !== index));
-  }, [setScheduledClasses]);
+  }, [packageId, existingClasses]);
 
   if (!packageId || !packageDetails) return null;
-  
-  const maxClasses = packageDetails?.totalClasses || 0;
-  const canAddMore = scheduledClasses.length < maxClasses;
-  const isComplete = scheduledClasses.length === maxClasses && scheduledClasses.every(c => c.date && c.startTime && c.endTime);
 
+  const maxClasses = packageDetails?.totalClasses || 0;
+  const filledClasses = scheduledClasses.filter(c => c.date && c.startTime && c.endTime && !c.isPreview);
+  const isComplete = filledClasses.length === maxClasses;
+  const previewCount = scheduledClasses.filter(c => c.isPreview).length;
+
+  // ── Agrupar clases por semana para mostrarlas ordenadas ──
+  const sortedClasses = [...scheduledClasses].sort((a, b) => {
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return moment(a.date).diff(moment(b.date));
+  });
 
   return (
-    <Box sx={{ mt: 3 }}>
+    <Box sx={{ mt: 2 }}>
+      {/* ── Header con contador ── */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 500, color: theme.text?.primary }}>
-          {translations.classSchedule || 'Class Schedule'}
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, color: theme.text?.primary }}>
+          {translations.classSchedule || 'Clases Programadas'}
         </Typography>
-        {canAddMore && (
-          <Button size="small" variant="outlined" onClick={handleAddClass} startIcon={<AddIcon />} sx={{ color: '#845EC2', borderColor: 'rgba(132, 94, 194, 0.5)' }}>
-            {translations.addClass || 'Add Class'}
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Chip
+            size="small"
+            icon={isComplete ? <CheckIcon sx={{ fontSize: '0.9rem !important' }} /> : <WarningIcon sx={{ fontSize: '0.9rem !important' }} />}
+            label={`${filledClasses.length} / ${maxClasses}`}
+            sx={{
+              fontWeight: 600,
+              bgcolor: isComplete
+                ? (theme.mode === 'light' ? 'rgba(46,125,50,0.1)' : 'rgba(46,125,50,0.2)')
+                : (theme.mode === 'light' ? 'rgba(255,152,0,0.1)' : 'rgba(255,152,0,0.2)'),
+              color: isComplete ? '#2e7d32' : '#e65100',
+              border: `1px solid ${isComplete ? 'rgba(46,125,50,0.3)' : 'rgba(255,152,0,0.3)'}`,
+            }}
+          />
+        </Box>
       </Box>
 
-      {scheduledClasses.map((classItem, index) => {
-        const classErrors = errors.filter(e => e.index === index).map(e => e.message);
-        const hasClassErrors = classErrors.length > 0;
-        
-        return (
-          <Box key={classItem.id || index} sx={{ mb: 2, p: 2, borderRadius: 2, border: '1px solid rgba(0,0,0,0.1)', background: hasClassErrors ? 'rgba(211, 47, 47, 0.05)' : 'rgba(0,0,0,0.02)', position: 'relative' }}>
-            <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {translations.class || 'Class'} {index + 1}
-            </Typography>
-            {scheduledClasses.length > 1 && !classItem.classId && (
-              <IconButton size="small" onClick={() => handleRemoveClass(index)} sx={{ position: 'absolute', top: 8, right: 8, color: '#FF5252' }}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            )}
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={4}>
-                <LocalizationProvider dateAdapter={AdapterMoment}>
-                  <DatePicker
-                    label={translations.date || 'Date'}
-                    value={classItem.date ? moment(classItem.date) : null}
-                    onChange={(newDate) => handleChangeClass(index, 'date', newDate ? newDate.format('YYYY-MM-DD') : '')}
-                    slotProps={{ textField: { fullWidth: true, size: "small", sx: textFieldStyle(theme) } }}
+      {/* ── Alerta si hay clases en preview ── */}
+      {previewCount > 0 && (
+        <Alert severity="warning" sx={{ mb: 2, fontSize: '0.85rem' }}>
+          ⚠️ Las fechas son provisionales. Pulsa <strong>Generar fechas</strong> para confirmarlas.
+        </Alert>
+      )}
+
+      {/* ── Alerta si está completo ── */}
+      {isComplete && previewCount === 0 && (
+        <Alert severity="success" sx={{ mb: 2, fontSize: '0.85rem' }}>
+          ✅ Las {maxClasses} clases están confirmadas y listas para guardar.
+        </Alert>
+      )}
+
+      {/* ── Lista de clases (solo lectura) ── */}
+      {sortedClasses.length === 0 ? (
+        <Box sx={{ p: 3, textAlign: 'center', border: '1px dashed', borderColor: theme.mode === 'light' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.15)', borderRadius: 2 }}>
+          <Typography variant="body2" sx={{ color: theme.text?.secondary }}>
+            Selecciona los bloques horarios en el calendario y genera las fechas para ver las clases aquí.
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {sortedClasses.map((classItem, index) => {
+            const classErrors = errors.filter(e => e.index === scheduledClasses.indexOf(classItem)).map(e => e.message);
+            const hasError = classErrors.length > 0;
+            const isPreview = !!classItem.isPreview;
+
+            const displayDate = classItem.date
+              ? moment(classItem.date).format('ddd DD/MM/YYYY')
+              : '—';
+            const displayTime = classItem.startTime && classItem.endTime
+              ? `${classItem.startTime} – ${classItem.endTime}`
+              : classItem.startTime || '—';
+            const dayName = classItem.date
+              ? moment(classItem.date).format('dddd')
+              : '';
+
+            return (
+              <Box
+                key={classItem.id || index}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  px: 2,
+                  py: 1.25,
+                  borderRadius: 2,
+                  border: '1px solid',
+                  borderColor: hasError
+                    ? 'rgba(211,47,47,0.4)'
+                    : isPreview
+                    ? 'rgba(255,152,0,0.35)'
+                    : theme.mode === 'light' ? 'rgba(132,94,194,0.2)' : 'rgba(132,94,194,0.35)',
+                  bgcolor: hasError
+                    ? (theme.mode === 'light' ? 'rgba(211,47,47,0.04)' : 'rgba(211,47,47,0.08)')
+                    : isPreview
+                    ? (theme.mode === 'light' ? 'rgba(255,152,0,0.04)' : 'rgba(255,152,0,0.08)')
+                    : (theme.mode === 'light' ? 'rgba(132,94,194,0.04)' : 'rgba(132,94,194,0.08)'),
+                  opacity: isPreview ? 0.75 : 1,
+                }}
+              >
+                {/* Número de clase */}
+                <Box sx={{
+                  minWidth: 28, height: 28,
+                  borderRadius: '50%',
+                  bgcolor: isPreview ? 'rgba(255,152,0,0.15)' : 'rgba(132,94,194,0.15)',
+                  color: isPreview ? '#e65100' : '#845EC2',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 700, fontSize: '0.78rem', flexShrink: 0
+                }}>
+                  {index + 1}
+                </Box>
+
+                {/* Fecha */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1 }}>
+                  <CalendarIcon sx={{ fontSize: '0.95rem', color: theme.text?.secondary }} />
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: theme.text?.primary }}>
+                    {displayDate}
+                  </Typography>
+                </Box>
+
+                {/* Hora */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                  <TimeIcon sx={{ fontSize: '0.95rem', color: theme.text?.secondary }} />
+                  <Typography variant="body2" sx={{ color: theme.text?.primary, fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {displayTime}
+                  </Typography>
+                </Box>
+
+                {/* Badge preview */}
+                {isPreview && (
+                  <Chip label="provisional" size="small" sx={{ height: 20, fontSize: '0.68rem', bgcolor: 'rgba(255,152,0,0.15)', color: '#e65100', fontWeight: 600 }} />
+                )}
+
+                {/* Badge error */}
+                {hasError && (
+                  <Chip
+                    label={classErrors[0]}
+                    size="small"
+                    sx={{ height: 20, fontSize: '0.68rem', bgcolor: 'rgba(211,47,47,0.1)', color: '#d32f2f', fontWeight: 600, maxWidth: 180 }}
                   />
-                </LocalizationProvider>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <LocalizationProvider dateAdapter={AdapterMoment}>
-                  <TimePicker
-                    label={translations.startTime || 'Start Time'}
-                    value={classItem.startTime ? moment(classItem.startTime, 'HH:mm') : null}
-                    onChange={(newTime) => handleChangeClass(index, 'startTime', newTime ? newTime.format('HH:mm') : '')}
-                    ampm={false}
-                    slotProps={{ textField: { fullWidth: true, size: "small", sx: textFieldStyle(theme) } }}
-                  />
-                </LocalizationProvider>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <LocalizationProvider dateAdapter={AdapterMoment}>
-                  <TimePicker
-                    label={translations.endTime || 'End Time'}
-                    value={classItem.endTime ? moment(classItem.endTime, 'HH:mm') : null}
-                    onChange={(newTime) => handleChangeClass(index, 'endTime', newTime ? newTime.format('HH:mm') : '')}
-                    ampm={false}
-                    slotProps={{ textField: { fullWidth: true, size: "small", sx: textFieldStyle(theme) } }}
-                  />
-                </LocalizationProvider>
-              </Grid>
-            </Grid>
-          </Box>
-        );
-      })}
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
     </Box>
   );
 });

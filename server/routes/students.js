@@ -21,7 +21,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
         {
           model: User,
           as: 'user',
-          attributes: ['username', 'email']
+          attributes: ['username', 'email', 'timezone']
         },
         {
           model: StudentPackage,
@@ -296,6 +296,24 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
     await student.update({ active: false });
     return res.json({ message: 'Student deactivated' });
   } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get weekly schedule for a student (from TeacherStudent relation)
+router.get('/:id/weekly-schedule', verifyToken, isSelfOrAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const relation = await TeacherStudent.findOne({
+      where: { studentId: id, active: true },
+      order: [['updatedAt', 'DESC']]
+    });
+    if (!relation || !relation.weeklySchedule) {
+      return res.json({ weeklySchedule: [] });
+    }
+    return res.json({ weeklySchedule: relation.weeklySchedule });
+  } catch (error) {
+    console.error('Error fetching weekly schedule:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
