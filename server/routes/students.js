@@ -45,11 +45,11 @@ router.get('/:id', verifyToken, isSelfOrAdmin, async (req, res) => {
     const { id } = req.params;
     const student = await Student.findByPk(id, {
       include: [
-        { model: User, as: 'user', attributes: ['username', 'email'] },
+        { model: User, as: 'user', attributes: ['username', 'email', 'timezone'] },
         { 
-            model: StudentPackage, 
-            as: 'packages', 
-            include: [{ model: Package, as: 'package' }] 
+          model: StudentPackage, 
+          as: 'packages', 
+          include: [{ model: Package, as: 'package' }] 
         }
       ]
     });
@@ -60,10 +60,89 @@ router.get('/:id', verifyToken, isSelfOrAdmin, async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// UPDATE STUDENT — corregido: timezone va en User, no en Student
+// ─────────────────────────────────────────────────────────────────────────────
+router.put('/:id', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const student = await Student.findByPk(id);
+    if (!student) return res.status(404).json({ message: 'Student not found' });
 
-/**
- * RUTA CRÍTICA: Asignar paquete a estudiante
- */
+    // Campos que pertenecen a la tabla Student
+    const studentFields = [
+      'name', 'surname', 'birthDate', 'phone',
+      'city', 'country', 'active', 'zoomLink', 'allowDifferentTeacher'
+    ];
+
+    const studentUpdateData = {};
+    for (const field of studentFields) {
+      if (req.body[field] !== undefined) {
+        studentUpdateData[field] = req.body[field];
+      }
+    }
+
+    await student.update(studentUpdateData);
+
+    // Campos que pertenecen a la tabla User (incluido timezone)
+    if (req.body.updateUser) {
+      const user = await User.findByPk(student.userId);
+      if (user) {
+        if (req.body.email)    user.email    = req.body.email;
+        if (req.body.username) user.username = req.body.username;
+        if (req.body.timezone) user.timezone = req.body.timezone; // <-- aquí va timezone
+        if (req.body.password) {
+          const salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(req.body.password, salt);
+        }
+        await user.save();
+      }
+    }
+
+    return res.json(student);
+  } catch (error) {
+    console.error('Update student error:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NUEVA RUTA: PUT /:id/packages/:packageId
+// Permite actualizar el status u otros campos de un StudentPackage específico.
+// Esto era lo que causaba el 500 — la ruta no existía.
+// ─────────────────────────────────────────────────────────────────────────────
+router.put('/:id/packages/:packageId', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { id, packageId } = req.params;
+
+    const studentPackage = await StudentPackage.findOne({
+      where: { id: packageId, studentId: id }
+    });
+
+    if (!studentPackage) {
+      return res.status(404).json({ message: 'StudentPackage not found' });
+    }
+
+    // Campos permitidos para actualizar
+    const allowedFields = ['status', 'remainingClasses', 'usedReschedules', 'paymentStatus', 'endDate'];
+    const updateData = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updateData[field] = req.body[field];
+      }
+    }
+
+    await studentPackage.update(updateData);
+    return res.json(studentPackage);
+  } catch (error) {
+    console.error('Update student package error:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUTA CRÍTICA: Asignar paquete a estudiante
+// ─────────────────────────────────────────────────────────────────────────────
 router.post('/:id/packages', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -98,8 +177,7 @@ router.post('/:id/packages', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-
-// Obtener paquetes de un estudiante específico (Faltaba esta ruta)
+// Obtener paquetes de un estudiante específico
 router.get('/:id/packages', verifyToken, isSelfOrAdmin, async (req, res) => {
   try {
     const studentPackages = await StudentPackage.findAll({
@@ -114,14 +192,12 @@ router.get('/:id/packages', verifyToken, isSelfOrAdmin, async (req, res) => {
   }
 });
 
-/** * MODIFICACIÓN: PROGRAMACIÓN SEMANAL RECURRENTE Y PERSISTENCIA DE HORARIO FIJO
- */
+// Programación semanal recurrente
 router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
     const { packageId, classes, teacherId, weeklySchedule: clientWeeklySchedule } = req.body;
-    // ↑ Renombramos el del cliente para evitar conflicto con el que calcularemos
 
     const studentPackage = await StudentPackage.findOne({
       where: { studentId: id, packageId, status: 'active' }
@@ -156,9 +232,6 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
 
     await StudentClass.bulkCreate(scheduledClasses, { transaction: t });
 
-    // --- GUARDAR HORARIO FIJO EN TeacherStudents ---
-    // Priorizamos el weeklySchedule que viene del frontend (ya calculado por ClassSchedulingForm).
-    // Si no viene, lo calculamos nosotros desde las clases como fallback.
     const weeklyScheduleToSave = (clientWeeklySchedule && clientWeeklySchedule.length > 0)
       ? clientWeeklySchedule
       : classes
@@ -170,12 +243,10 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
             endTime: cls.endTime
           }))
           .filter((slot, index, arr) =>
-            // Deduplicar: un slot por combinación día+hora
             arr.findIndex(s => s.day === slot.day && s.hour === slot.hour) === index
           );
 
     if (teacherId && weeklyScheduleToSave.length > 0) {
-      // Buscamos el registro activo de la relación profesor-estudiante
       const teacherStudentRecord = await TeacherStudent.findOne({
         where: { studentId: id, teacherId, active: true },
         transaction: t
@@ -187,7 +258,6 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
           { transaction: t }
         );
       } else {
-        // Si aún no existe la relación (el AddDialog la crea después), la creamos aquí
         await TeacherStudent.create({
           teacherId,
           studentId: id,
@@ -197,7 +267,6 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
         }, { transaction: t });
       }
     }
-    // --- FIN GUARDAR HORARIO FIJO ---
 
     await studentPackage.update({
       remainingClasses: scheduledClasses.length
@@ -207,40 +276,12 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
     return res.status(201).json({ 
       message: 'Schedule created and fixed hours saved', 
       count: scheduledClasses.length,
-      weeklySchedule: weeklyScheduleToSave  // Devolvemos para debug/confirmación
+      weeklySchedule: weeklyScheduleToSave
     });
 
   } catch (error) {
     if (t) await t.rollback();
     console.error('Schedule error:', error);
-    return res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// Update student
-router.put('/:id', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const student = await Student.findByPk(id);
-    if (!student) return res.status(404).json({ message: 'Student not found' });
-
-    await student.update(req.body);
-
-    if (req.body.updateUser) {
-      const user = await User.findByPk(student.userId);
-      if (user) {
-        if (req.body.email) user.email = req.body.email;
-        if (req.body.username) user.username = req.body.username;
-        if (req.body.password) {
-            const salt = await bcrypt.genSalt(10);
-            user.password = await bcrypt.hash(req.body.password, salt);
-        }
-        await user.save();
-      }
-    }
-
-    return res.json(student);
-  } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
