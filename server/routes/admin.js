@@ -17,46 +17,61 @@ router.use(isAdmin);
 // Get admin dashboard stats
 router.get('/stats', async (req, res) => {
   try {
-    // 1. Estudiantes Reales: Contamos todos los que NO estén marcados como inactivos (0)
-    // Usamos Op.or para capturar registros donde active sea true, 1 o null
+    const ADMIN_TIMEZONE = process.env.ADMIN_TIMEZONE || 'America/Caracas';
+    const today = moment().tz(ADMIN_TIMEZONE).format('YYYY-MM-DD');
+ 
+    // ── 1. Estudiantes activos CON paquete activo ─────────────────────────────
+    // Solo cuenta estudiantes que: están activos Y tienen al menos un StudentPackage activo
     const totalStudents = await Student.count({
-      where: { 
-        [Op.or]: [
-          { active: true },
-          { active: 1 },
-          { active: null } 
-        ]
-      }
+      where: { active: true },
+      include: [
+        {
+          model: StudentPackage,
+          as: 'packages',
+          where: { status: 'active' },
+          required: true   // INNER JOIN — excluye estudiantes sin paquete activo
+        }
+      ],
+      distinct: true      // Evita duplicados si un estudiante tuviera varios paquetes activos
     });
-    
-    // 2. Paquetes Activos (Suscripciones vigentes de alumnos):
-    // Cambiamos 'Package' por 'StudentPackage' para ver cuántos alumnos tienen planes hoy
-    const activePackagesCount = await StudentPackage.count({ 
-      where: { status: 'active' } 
+ 
+    // ── 2. Paquetes activos válidos ───────────────────────────────────────────
+    // Excluye: remainingClasses = 0, paquete expirado, estudiante inactivo
+    const activePackages = await StudentPackage.count({
+      where: {
+        status: 'active',
+        remainingClasses: { [Op.gt]: 0 },
+        endDate: { [Op.gte]: today }   // no expirados
+      },
+      include: [
+        {
+          model: Student,
+          as: 'student',
+          where: { active: true },     // solo estudiantes activos
+          required: true
+        }
+      ]
     });
-
-    // 3. Clases de HOY (Ajuste de zona horaria estricto)
-    const adminTz = 'America/Caracas'; 
-    const today = moment().tz(adminTz).format('YYYY-MM-DD');
-    
-    console.log('Consultando estadísticas para la fecha:', today);
-
+ 
+    // ── 3. Clases de hoy (scheduled o completed) ──────────────────────────────
     const classesToday = await Class.count({
       where: {
         date: today,
-        // Contamos tanto las programadas como las completadas del día de hoy
-        status: { [Op.in]: ['scheduled', 'completed'] } 
+        status: { [Op.in]: ['scheduled', 'completed'] }
       }
     });
-    
-    res.json({
-      totalStudents: totalStudents || 0,
-      activePackages: activePackagesCount || 0,
-      classesToday: classesToday || 0
+ 
+    console.log(`[Dashboard Stats] Date: ${today} (${ADMIN_TIMEZONE})`);
+    console.log(`[Dashboard Stats] Students w/active package: ${totalStudents} | Active Packages (>0 classes): ${activePackages} | Classes Today: ${classesToday}`);
+ 
+    return res.json({
+      totalStudents,
+      activePackages,
+      classesToday
     });
   } catch (error) {
     console.error('Get admin stats error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    return res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

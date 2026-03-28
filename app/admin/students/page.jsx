@@ -18,7 +18,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import ThemeToggle from '../../components/ThemeToggle';
 import LanguageToggle from '../../components/LanguageToggle';
 import { useRouter } from 'next/navigation';
-import { studentAPI, packageAPI, authAPI, adminAPI } from '../../utils/api';
+import { studentAPI, packageAPI, authAPI, adminAPI, fetchWithAuth } from '../../utils/api';
 import ThemeTransition from '../../components/ThemeTransition';
 
 // Import components
@@ -96,6 +96,7 @@ export default function Students() {
   const [scheduledClasses, setScheduledClasses] = useState([]);
   const [existingClasses, setExistingClasses] = useState([]);
   const [isMobile, setIsMobile] = useState(false);
+  const [initialTeacherId, setInitialTeacherId] = useState('');
   
   // Check if device is mobile
   useEffect(() => {
@@ -336,7 +337,15 @@ export default function Students() {
         package: activePackage?.packageId || ''
       });
       
-      // Set the selected student and open the dialog
+      
+        try {
+          const teacherData = await fetchWithAuth(`/students/${student.id}/teacher`);
+          setInitialTeacherId(teacherData.teacherId || '');
+        } catch (e) {
+          setInitialTeacherId('');
+        }
+
+
       setSelectedStudent(student);
       setEditOpen(true);
     } catch (error) {
@@ -889,7 +898,10 @@ export default function Students() {
       {/* Edit Dialog */}
       <EditDialog
         open={editOpen}
-        onClose={() => setEditOpen(false)}
+        onClose={() => {
+            setEditOpen(false);
+            setInitialTeacherId('');
+          }}
         student={selectedStudent}
         formData={formData}
         setFormData={setFormData}
@@ -900,6 +912,7 @@ export default function Students() {
         setExistingClasses={setExistingClasses}
         setMessage={setMessage}
         refreshStudents={refreshStudents}
+        initialTeacherId={initialTeacherId}
       />
 
       {/* Add Dialog */}

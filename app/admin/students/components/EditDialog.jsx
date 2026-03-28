@@ -107,7 +107,8 @@ const EditDialog = ({
   existingClasses,
   setExistingClasses,
   setMessage,
-  refreshStudents
+  refreshStudents,
+  initialTeacherId  
 }) => {
   const [loading, setLoading] = useState(false);
   const [packageDetails, setPackageDetails] = useState(null);
@@ -206,6 +207,10 @@ const EditDialog = ({
       if (student.country) fetchCities(student.country);
 
       fetchTeachers();
+      if (initialTeacherId) {
+        setSelectedTeacher(initialTeacherId);
+        fetchTeacherSchedule(initialTeacherId);
+      }
       formInitialized.current = true;
     }
 
@@ -640,11 +645,19 @@ const EditDialog = ({
           }
 
           // Schedule brand-new classes (no classId)
+          // Si hay clases nuevas SIN classId, significa que el admin rehizo el horario
+          // → primero borramos las scheduled existentes, luego creamos las nuevas
           const newClasses = scheduledClasses.filter(cls => !cls.classId && cls.date && cls.startTime && cls.endTime);
           if (newClasses.length > 0) {
             const studentPackages = await studentAPI.getStudentPackages(student.id);
             const activePackage = studentPackages.find(p => p.packageId === Number(formData.package) && p.status === 'active');
             if (activePackage) {
+              // ── BORRAR clases scheduled anteriores antes de crear las nuevas ──
+              await fetchWithAuth(`/students/${student.id}/packages/${activePackage.id}/scheduled-classes`, {
+                method: 'DELETE'
+              });
+
+              // ── Crear las nuevas clases ──
               await studentAPI.scheduleClasses(student.id, {
                 packageId: formData.package,
                 classes: newClasses,

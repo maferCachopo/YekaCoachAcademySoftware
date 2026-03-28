@@ -300,6 +300,20 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
+// Obtener profesor activo de un estudiante
+router.get('/:id/teacher', verifyToken, isSelfOrAdmin, async (req, res) => {
+  try {
+    const relation = await TeacherStudent.findOne({
+      where: { studentId: req.params.id, active: true },
+      order: [['updatedAt', 'DESC']]
+    });
+    if (!relation) return res.json({ teacherId: null });
+    return res.json({ teacherId: relation.teacherId });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Get weekly schedule for a student (from TeacherStudent relation)
 router.get('/:id/weekly-schedule', verifyToken, isSelfOrAdmin, async (req, res) => {
   try {
@@ -314,6 +328,72 @@ router.get('/:id/weekly-schedule', verifyToken, isSelfOrAdmin, async (req, res) 
     return res.json({ weeklySchedule: relation.weeklySchedule });
   } catch (error) {
     console.error('Error fetching weekly schedule:', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE todas las clases SCHEDULED de un paquete activo del estudiante
+// Se llama desde EditDialog antes de crear las nuevas cuando cambia el horario
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/:id/packages/:packageId/scheduled-classes', verifyToken, isAdmin, async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id, packageId } = req.params;
+
+    // Encontrar el StudentPackage activo
+    const studentPackage = await StudentPackage.findOne({
+      where: { studentId: id, id: packageId }
+    });
+    if (!studentPackage) {
+      await t.rollback();
+      return res.status(404).json({ message: 'StudentPackage not found' });
+    }
+
+    // Obtener todas las StudentClasses scheduled de este paquete
+    const scheduledStudentClasses = await StudentClass.findAll({
+      where: {
+        studentId: id,
+        studentPackageId: packageId,
+        status: 'scheduled'
+      },
+      transaction: t
+    });
+
+    if (scheduledStudentClasses.length === 0) {
+      await t.rollback();
+      return res.json({ message: 'No scheduled classes to delete', deleted: 0 });
+    }
+
+    const classIds = scheduledStudentClasses.map(sc => sc.classId);
+
+    // Borrar StudentClasses
+    await StudentClass.destroy({
+      where: {
+        studentId: id,
+        studentPackageId: packageId,
+        status: 'scheduled'
+      },
+      transaction: t
+    });
+
+    // Borrar las Classes huérfanas (solo si no las usa otro estudiante)
+    for (const classId of classIds) {
+      const otherStudentClass = await StudentClass.findOne({
+        where: { classId },
+        transaction: t
+      });
+      if (!otherStudentClass) {
+        await Class.destroy({ where: { id: classId }, transaction: t });
+      }
+    }
+
+    await t.commit();
+    console.log(`[Schedule Reset] Deleted ${scheduledStudentClasses.length} scheduled classes for student ${id}, package ${packageId}`);
+    return res.json({ message: 'Scheduled classes deleted', deleted: scheduledStudentClasses.length });
+  } catch (error) {
+    if (t) await t.rollback();
+    console.error('Delete scheduled classes error:', error);
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
