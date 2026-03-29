@@ -1124,6 +1124,7 @@ const EditDialog = ({
                   onSlotSelect={handleSlotSelect}
                   scheduledClasses={scheduledClasses}
                   onAvailabilityValidation={handleAvailabilityValidation}
+                  currentStudent={student}  
                 />
               </Box>
             ) : (
@@ -1276,6 +1277,7 @@ const EditDialog = ({
                   onSlotSelect={handleSlotSelect}
                   scheduledClasses={scheduledClasses}
                   onAvailabilityValidation={handleAvailabilityValidation}
+                  currentStudent={student}  
                 />
               </Box>
             ) : (
