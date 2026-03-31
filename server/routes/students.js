@@ -192,6 +192,92 @@ router.get('/:id/packages', verifyToken, isSelfOrAdmin, async (req, res) => {
   }
 });
 
+router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { newPackageId, teacherId, classes, weeklySchedule, startDate } = req.body;
+
+    const student = await Student.findByPk(id, { transaction: t });
+    const currentActivePackage = await StudentPackage.findOne({
+      where: { studentId: id, status: 'active' },
+      transaction: t
+    });
+
+    if (!currentActivePackage) throw new Error('No se encontró paquete activo.');
+
+    // 1. Cancelar el viejo
+    await currentActivePackage.update({ status: 'cancelled', notes: 'Cancelado por upgrade' }, { transaction: t });
+
+    // 2. Limpiar clases programadas futuras del viejo paquete
+    const oldScheduled = await StudentClass.findAll({
+      where: { studentId: id, studentPackageId: currentActivePackage.id, status: 'scheduled' },
+      transaction: t
+    });
+
+    if (oldScheduled.length > 0) {
+      const oldClassIds = oldScheduled.map(sc => sc.classId);
+      await StudentClass.destroy({ where: { id: oldScheduled.map(sc => sc.id) }, transaction: t });
+      for (const cId of oldClassIds) {
+        const others = await StudentClass.findOne({ where: { classId: cId }, transaction: t });
+        if (!others) await Class.destroy({ where: { id: cId }, transaction: t });
+      }
+    }
+
+    // 3. Crear nuevo paquete
+    const newPkgBase = await Package.findByPk(newPackageId, { transaction: t });
+    const newStudentPackage = await StudentPackage.create({
+      studentId: id,
+      packageId: newPackageId,
+      startDate: startDate,
+      endDate: moment(startDate).add(newPkgBase.durationMonths, 'months').format('YYYY-MM-DD'),
+      remainingClasses: classes.length,
+      status: 'active',
+      paymentStatus: 'paid'
+    }, { transaction: t });
+
+    // 4. Crear clases con el NOMBRE DEL ESTUDIANTE en el Title
+    const studentFullName = `${student.name} ${student.surname}`;
+
+    for (const cls of classes) {
+      const classRecord = await Class.create({
+        title: studentFullName, // <--- CAMBIO CLAVE PARA EL CRONOGRAMA
+        date: cls.date,
+        startTime: cls.startTime,
+        endTime: cls.endTime,
+        teacherId: teacherId,
+        status: 'scheduled',
+        timezone: ADMIN_TIMEZONE,
+        maxStudents: 1
+      }, { transaction: t });
+
+      await StudentClass.create({
+        studentId: id,
+        classId: classRecord.id,
+        studentPackageId: newStudentPackage.id,
+        status: 'scheduled',
+        canReschedule: true
+      }, { transaction: t });
+    }
+
+    // 5. Actualizar weeklySchedule
+    if (weeklySchedule) {
+      const [tsRelation] = await TeacherStudent.findOrCreate({
+        where: { teacherId, studentId: id },
+        defaults: { active: true },
+        transaction: t
+      });
+      await tsRelation.update({ weeklySchedule, active: true }, { transaction: t });
+    }
+
+    await t.commit();
+    res.json({ message: 'Upgrade exitoso', package: newStudentPackage });
+  } catch (error) {
+    await t.rollback();
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Programación semanal recurrente
 router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
   const t = await sequelize.transaction();
@@ -211,7 +297,7 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
     const scheduledClasses = [];
     for (const cls of classes) {
       const classRecord = await Class.create({
-        title: cls.title || 'Clase Individual',
+        title: studentFullName,
         date: cls.date,
         startTime: cls.startTime,
         endTime: cls.endTime,

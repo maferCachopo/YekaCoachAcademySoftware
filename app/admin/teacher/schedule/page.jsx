@@ -246,10 +246,16 @@ export default function TeacherSchedule() {
                             </Box>
                           )}
                           {status.type === 'class' && (
-                            <Box sx={{ color: 'white', textAlign: 'center' }}>
-                              <Typography sx={{ fontSize: '0.6rem', fontWeight: 'bold' }}>CLASE</Typography>
-                              <Typography sx={{ fontSize: '0.65rem' }} noWrap>{status.data.studentName}</Typography>
-                            </Box>
+                             <Box sx={{ color: 'white', textAlign: 'center', p: 0.5 }}>
+                                <Typography sx={{ fontSize: '0.7rem', fontWeight: 'bold', lineHeight: 1.1 }}>
+                                        {status.data.studentName || status.data.title || 'Clase'}
+                                </Typography>
+                                    {status.data.studentSurname && (
+                                <Typography sx={{ fontSize: '0.65rem', opacity: 0.9 }}>
+                                          {status.data.studentSurname}
+                                </Typography>
+                                )}
+                              </Box>
                           )}
                         </TableCell>
                       </Tooltip>

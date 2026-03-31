@@ -263,48 +263,69 @@ const ViewDialog = ({ open, onClose, student, setMessage }) => {
     );
   };
 
-  const renderPackageHistory = () => {
-    if (!displayStudent.allPackages || displayStudent.allPackages.length === 0) {
-      return (
-        <Box sx={{ p: 4, textAlign: 'center', border: '1px dashed', borderColor: theme.mode === 'light' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.15)', borderRadius: 2, backgroundColor: theme.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)', mt: 2 }}>
-          <Typography variant="body1" sx={{ color: theme.text?.secondary, mb: 1 }}>{translations.noPackageHistory || 'No package history available'}</Typography>
-        </Box>
-      );
-    }
+  // Sustituye la función renderPackageHistory dentro de ViewDialog.jsx por esta:
+
+const renderPackageHistory = () => {
+  if (!displayStudent.allPackages || displayStudent.allPackages.length === 0) {
     return (
-      <Box sx={{ mt: 2 }}>
-        <TableContainer component={Paper} variant="outlined" sx={{ boxShadow: 'none', border: theme.mode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-          <Table size="small">
-            <TableHead sx={{ backgroundColor: theme.mode === 'light' ? 'rgba(132,94,194,0.08)' : 'rgba(0,0,0,0.3)' }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.packageName || 'Package Name'}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.startDate || 'Start Date'}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.endDate || 'End Date'}</TableCell>
-                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.status || 'Status'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody sx={{ bgcolor: theme.mode === 'light' ? '#fff' : '#1e1e2d' }}>
-              {displayStudent.allPackages.map((pkg) => (
-                <TableRow key={pkg.id} sx={{ '&:hover': { backgroundColor: theme?.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)' } }}>
-                  <TableCell sx={{ color: theme.text?.primary }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <SchoolIcon sx={{ color: '#845EC2', fontSize: '1rem' }} />
-                      {pkg.package?.name || 'Unknown Package'}
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ color: theme.text?.primary }}>{pkg.startDate ? new Date(pkg.startDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
-                  <TableCell sx={{ color: theme.text?.primary }}>{pkg.endDate ? new Date(pkg.endDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
-                  <TableCell>
-                    <Chip size="small" label={pkg.status || 'unknown'} sx={{ fontWeight: 500, bgcolor: pkg.status === 'active' ? (theme.mode === 'light' ? 'rgba(46,125,50,0.1)' : 'rgba(46,125,50,0.2)') : (theme.mode === 'light' ? 'rgba(158,158,158,0.1)' : 'rgba(158,158,158,0.2)'), color: pkg.status === 'active' ? '#2e7d32' : '#9e9e9e' }} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+      <Box sx={{ p: 4, textAlign: 'center', border: '1px dashed', borderColor: theme.mode === 'light' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.15)', borderRadius: 2, backgroundColor: theme.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)', mt: 2 }}>
+        <Typography variant="body1" sx={{ color: theme.text?.secondary, mb: 1 }}>{translations.noPackageHistory || 'No package history available'}</Typography>
       </Box>
     );
-  };
+  }
+  return (
+    <Box sx={{ mt: 2 }}>
+      <TableContainer component={Paper} variant="outlined" sx={{ boxShadow: 'none', border: theme.mode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+        <Table size="small">
+          <TableHead sx={{ backgroundColor: theme.mode === 'light' ? 'rgba(132,94,194,0.08)' : 'rgba(0,0,0,0.3)' }}>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.packageName || 'Package Name'}</TableCell>
+              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.startDate || 'Start Date'}</TableCell>
+              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.endDate || 'End Date'}</TableCell>
+              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.status || 'Status'}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody sx={{ bgcolor: theme.mode === 'light' ? '#fff' : '#1e1e2d' }}>
+            {displayStudent.allPackages.map((pkg) => (
+              <TableRow key={pkg.id} sx={{ '&:hover': { backgroundColor: theme?.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)' } }}>
+                <TableCell sx={{ color: theme.text?.primary }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SchoolIcon sx={{ color: '#845EC2', fontSize: '1rem' }} />
+                    {pkg.package?.name || 'Unknown Package'}
+                  </Box>
+                </TableCell>
+                <TableCell sx={{ color: theme.text?.primary }}>{pkg.startDate ? new Date(pkg.startDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
+                <TableCell sx={{ color: theme.text?.primary }}>{pkg.endDate ? new Date(pkg.endDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
+                <TableCell>
+                  {/* LÓGICA DE CHIP ACTUALIZADA */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <Chip 
+                      size="small" 
+                      label={pkg.status === 'cancelled' ? 'Cancelado por Upgrade' : (pkg.status || 'unknown')} 
+                      sx={{ 
+                        fontWeight: 600, 
+                        bgcolor: pkg.status === 'cancelled' 
+                          ? 'rgba(255, 152, 0, 0.2)' // Naranja suave
+                          : pkg.status === 'active' ? 'rgba(46,125,50,0.1)' : 'rgba(158,158,158,0.1)',
+                        color: pkg.status === 'cancelled' ? '#ef6c00' : pkg.status === 'active' ? '#2e7d32' : '#9e9e9e',
+                        border: pkg.status === 'cancelled' ? '1px solid #ef6c00' : 'none'
+                      }} 
+                    />
+                    {pkg.status === 'cancelled' && pkg.notes && (
+                       <Typography variant="caption" sx={{ color: theme.text?.disabled, fontStyle: 'italic', ml: 1 }}>
+                         {pkg.notes}
+                       </Typography>
+                    )}
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
 
   // ─────────────────────────────────────────────────────────────────────────
   // CARD: Horario habitual con conversión de zona horaria

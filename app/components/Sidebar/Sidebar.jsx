@@ -13,7 +13,8 @@ import {
   CalendarToday as CalendarIcon,
   Person as PersonIcon,
   School as TeacherIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  TrendingUp as UpgradeIcon
 } from '@mui/icons-material';
 import { useRouter, usePathname } from 'next/navigation';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -29,6 +30,7 @@ const menuItems = {
     { title: 'Teachers', icon: TeacherIcon, path: '/admin/teacher' },
     { title: 'Schedule', icon: CalendarIcon, path: '/admin/teacher/schedule' },
     { title: 'Packages', icon: PackagesIcon, path: '/admin/packages' },
+    { title: 'Upgrade', icon: UpgradeIcon, path: '/admin/students/upgrade' },
   ],
   student: [
     { title: 'Dashboard', icon: DashboardIcon, path: '/student/dashboard' },

@@ -523,6 +523,13 @@ export const studentAPI = {
       throw error;
     }
   },
+
+    upgradePackage: async (studentId, data) => {
+    return fetchWithAuth(`/students/${studentId}/upgrade-package`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
   
   // Add the student profile endpoint
   getStudentProfile: async (id) => {
