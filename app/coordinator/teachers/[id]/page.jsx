@@ -81,7 +81,6 @@ export default function TeacherDetailPage() {
     
     // If day isn't recognized, use today's date as fallback
     if (dayIndex === -1) {
-      console.log('Day not recognized:', day);
       return time; // Return the original time if day isn't valid
     }
     
@@ -93,14 +92,7 @@ export default function TeacherDetailPage() {
     const dateString = targetDate.toISOString().split('T')[0];
     const userTimezone = user?.timezone || null;
     
-    // Debug log
-    console.log('Timezone conversion for work/break hours:', {
-      day,
-      time,
-      dateString,
-      userTimezone,
-      adminTimezone: ADMIN_TIMEZONE
-    });
+    
     
     return timezoneUtils.formatUserTime(dateString, time, ADMIN_TIMEZONE, userTimezone);
   };
@@ -111,13 +103,6 @@ export default function TeacherDetailPage() {
     
     const userTimezone = user?.timezone || null;
     
-    // Debug log
-    console.log('Timezone conversion for class:', {
-      dateString,
-      time,
-      userTimezone,
-      adminTimezone: ADMIN_TIMEZONE
-    });
     
     return timezoneUtils.formatUserTime(dateString, time, ADMIN_TIMEZONE, userTimezone);
   };
@@ -163,11 +148,6 @@ export default function TeacherDetailPage() {
         setLoading(true);
         const data = await fetchWithAuth(`/coordinator/teachers/${teacherId}/schedule`);
         
-        console.log('API response:', data);
-        
-        // Debug work hours and break hours
-        console.log('Work hours from API:', JSON.stringify(data.workHours || {}, null, 2));
-        console.log('Break hours from API:', JSON.stringify(data.breakHours || {}, null, 2));
         
         setTeacher(data.teacher);
         setAssignedStudents(data.assignedStudents || []);
@@ -203,7 +183,6 @@ export default function TeacherDetailPage() {
           exams: data.exams || []
         });
         
-        console.log('Classes received:', data.classes?.length || 0);
       } catch (err) {
         console.error('Error fetching teacher schedule:', err);
         setError(err.message || 'Failed to fetch teacher schedule');
@@ -245,16 +224,8 @@ export default function TeacherDetailPage() {
         return true;
       });
       
-      // Debug log
-      console.log('Coordinator view - processed classes:', {
-        original: schedule.classes.length,
-        filtered: processedClasses.length,
-        rescheduledCount: processedClasses.filter(c => c.isRescheduled).length,
-        statusCounts: processedClasses.reduce((counts, c) => {
-          counts[c.status] = (counts[c.status] || 0) + 1;
-          return counts;
-        }, {})
-      });
+
+    
       
       // Update the schedule with the processed classes
       setSchedule(prevSchedule => ({

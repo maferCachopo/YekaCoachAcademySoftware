@@ -6,7 +6,6 @@ const path = require('path');
 const dbPath = path.join(__dirname, 'database.sqlite');
 const db = new sqlite3.Database(dbPath);
 
-console.log(`Connecting to database at: ${dbPath}`);
 
 // Check if user exists
 db.get("SELECT * FROM Users WHERE id = ?", [20], async (err, row) => {
@@ -17,16 +16,13 @@ db.get("SELECT * FROM Users WHERE id = ?", [20], async (err, row) => {
   }
   
   if (!row) {
-    console.log('User with ID 20 not found in the database');
     
     // List all users
     db.all("SELECT id, username, email FROM Users", [], (err, rows) => {
       if (err) {
         console.error('Error listing users:', err);
       } else {
-        console.log('Users in database:');
         rows.forEach(user => {
-          console.log(`ID: ${user.id}, Username: ${user.username}, Email: ${user.email}`);
         });
       }
       db.close();
@@ -34,13 +30,7 @@ db.get("SELECT * FROM Users WHERE id = ?", [20], async (err, row) => {
     return;
   }
   
-  console.log('User found:', {
-    id: row.id,
-    username: row.username,
-    email: row.email,
-    // Don't log the full hash for security
-    passwordHash: row.password ? (row.password.substring(0, 20) + '...') : 'null'
-  });
+  
   
   // Test if 123456 is already the correct password
   const testPassword = '123456';
@@ -54,7 +44,6 @@ db.get("SELECT * FROM Users WHERE id = ?", [20], async (err, row) => {
     }
   }
   
-  console.log(`Is password "${testPassword}" valid? ${isValid}`);
   
   // Generate a new hash for 123456
   const salt = await bcrypt.genSalt(10);
@@ -66,8 +55,6 @@ db.get("SELECT * FROM Users WHERE id = ?", [20], async (err, row) => {
     if (err) {
       console.error('Error updating password:', err);
     } else {
-      console.log(`Password reset successful! Changes: ${this.changes} rows affected`);
-      console.log(`New password for user ID 20 is set to: ${testPassword}`);
     }
     
     db.close();

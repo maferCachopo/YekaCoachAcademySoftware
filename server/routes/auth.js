@@ -70,25 +70,20 @@ router.post('/login', async (req, res) => {
     
     // If teacher, include teacher data
     if (user.role === 'teacher' || user.role === 'coordinator') {
-      console.log(`SERVER DEBUG - User ${user.username} is a teacher, fetching teacher data`);
       
       try {
         // Log all teachers to see if any exist
         const allTeachers = await Teacher.findAll();
-        console.log(`SERVER DEBUG - Total teachers in database: ${allTeachers.length}`);
         
         // Check if Teacher model is correctly defined
-        console.log(`SERVER DEBUG - Teacher model attributes:`, Object.keys(Teacher.rawAttributes));
         
         const teacher = await Teacher.findOne({ 
           where: { userId: user.id },
           attributes: ['id', 'firstName', 'lastName', 'phone', 'isCoordinator', 'active']
         });
         
-        console.log(`SERVER DEBUG - Teacher query result:`, teacher ? 'Found' : 'Not found');
         
         if (teacher) {
-          console.log(`SERVER DEBUG - Found teacher record for ${user.username}: ID ${teacher.id}, Name: ${teacher.firstName} ${teacher.lastName}`);
           
           // Check if teacher is active
           if (!teacher.active) {

@@ -101,11 +101,9 @@ const TimezoneSelector = ({ value, onChange, label = 'Timezone' }) => {
         // Use the Auth context's updateTimezone function if available
         if (updateTimezone) {
           const response = await updateTimezone(newValue);
-          console.log('Timezone updated successfully on server:', response);
         } else {
           // Fallback to direct API call
           const response = await authAPI.updateTimezone(newValue);
-          console.log('Timezone updated successfully on server:', response);
         }
       } catch (error) {
         console.error('Failed to update timezone on server:', error);

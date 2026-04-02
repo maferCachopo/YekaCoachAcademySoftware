@@ -827,7 +827,6 @@ export function LanguageProvider({ children }) {
       try {
         const savedLanguage = localStorage.getItem('yekacoachacademy_language');
         if (savedLanguage && ['en', 'es'].includes(savedLanguage)) {
-          console.log('Loading saved language from localStorage:', savedLanguage);
           setLanguage(savedLanguage);
         }
       } catch (error) {
@@ -840,7 +839,6 @@ export function LanguageProvider({ children }) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        console.log('Saving language to localStorage:', language);
         localStorage.setItem('yekacoachacademy_language', language);
       } catch (error) {
         console.error('Error saving language preference to localStorage:', error);
@@ -851,7 +849,6 @@ export function LanguageProvider({ children }) {
   const toggleLanguage = () => {
     setLanguage(prev => {
       const newLanguage = prev === 'en' ? 'es' : 'en';
-      console.log('Toggling language from', prev, 'to', newLanguage);
       return newLanguage;
     });
   };

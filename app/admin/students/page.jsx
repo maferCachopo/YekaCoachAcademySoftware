@@ -261,7 +261,7 @@ export default function Students() {
                 // Set remaining classes to exactly match scheduled classes count
                 activePackage.remainingClasses = scheduledClassesCount;
                 
-                console.log('DEBUG - Table refresh - Setting remaining classes:', {
+                ('DEBUG - Table refresh - Setting remaining classes:', {
                   studentId: student.id,
                   packageId: activePackage.id,
                   scheduledClassesCount,

@@ -112,29 +112,32 @@ const TeacherAvailabilityCalendar = ({
 
   // Renderizado de colores actualizado
   const getSlotStyles = (status) => {
-    let styles = {
-      bgColor: 'transparent',
-      textColor: 'inherit',
-      cursor: status.disabled ? 'not-allowed' : 'pointer',
-      text: ''
-    };
+      let styles = {
+        bgColor: 'transparent',
+        textColor: 'inherit',
+        cursor: status.disabled ? 'not-allowed' : 'pointer',
+        text: ''
+      };
 
-    switch (status.type) {
-      case 'selected':
-        styles.bgColor = '#845EC2';
-        styles.textColor = 'white';
-        styles.text = '✓';
-        break;
-      case 'current_student_fixed':
-        styles.bgColor = 'rgba(132, 94, 194, 0.4)'; // Un púrpura claro/transparente
-        styles.textColor = '#5D3E9E';
-        styles.text = currentStudent?.name || 'Tú';
-        break;
-      case 'occupied':
-        styles.bgColor = '#4B4453';
-        styles.textColor = 'white';
-        styles.text = 'Busy';
-        break;
+     switch (status.type) {
+        case 'selected':
+          styles.bgColor = '#845EC2'; // Púrpura principal
+          styles.textColor = 'white';
+          styles.text = '✓';
+          break;
+        case 'current_student_fixed':
+          // CAMBIO AQUÍ: Usamos el mismo color sólido que 'selected' 
+          // o el color de 'available' si quieres que parezca editable.
+          // Para que se vea igual al "Edit" (donde ya es su lugar), usamos el púrpura:
+          styles.bgColor = '#845EC2'; 
+          styles.textColor = 'white';
+          styles.text = '✓'; // O el nombre del alumno si prefieres
+          break;
+        case 'occupied':
+          styles.bgColor = '#4B4453';
+          styles.textColor = 'white';
+          styles.text = 'Busy';
+          break;
       case 'available':
         styles.bgColor = 'rgba(76, 175, 80, 0.15)';
         break;

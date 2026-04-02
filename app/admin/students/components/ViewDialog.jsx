@@ -108,8 +108,7 @@ const ViewDialog = ({ open, onClose, student, setMessage }) => {
   const allClasses = displayStudent.allClasses || [];
   const classesByPackage = displayStudent.classesByPackage || {};
 
-  console.log('DEBUG - Current Classes:', currentClasses);
-  console.log('DEBUG - All Classes:', allClasses);
+  
 
   // ── Derive weekly schedule from scheduled classes if API fallback ──
   const derivedSchedule = (() => {
@@ -499,7 +498,7 @@ const renderPackageHistory = () => {
                           const activePkg = displayStudent.packages?.find(p => p.status === 'active');
                           if (!activePkg) return '0';
                           const count = allClasses.filter(c => c.status === 'scheduled' && c.studentPackageId === activePkg.id).length;
-                          console.log('DEBUG - Scheduled classes count:', { activePackageId: activePkg.id, scheduledClassesCount: count, storedRemainingClasses: activePkg.remainingClasses });
+              
                           return count.toString();
                         })()}
                       </Typography>

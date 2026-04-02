@@ -29,8 +29,6 @@ import RescheduleModal from '../profile/components/RescheduleModalContainer';
 
 const localizer = momentLocalizer(moment);
 
-// Using centralized timezone utilities instead of local conversion
-
 // Update calendar styles for React Big Calendar
 const calendarStyles = (theme) => ({
   '.rbc-calendar': {
@@ -92,7 +90,7 @@ const calendarStyles = (theme) => ({
   },
   '.rbc-timeslot-group': {
     borderBottom: theme.isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.05)',
-    minHeight: '40px',  // Reduced height for better visibility of full day
+    minHeight: '40px',
   },
   '.rbc-time-slot': {
     color: theme.isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)',
@@ -152,7 +150,6 @@ const calendarStyles = (theme) => ({
     fontWeight: 'bold',
     padding: '6px',
   },
-  // Add styles for agenda view
   '.rbc-agenda-view': {
     background: theme.isDark ? '#1E2433' : '#fff',
     table: {
@@ -181,7 +178,6 @@ const calendarStyles = (theme) => ({
       borderBottom: theme.isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(0,0,0,0.05)',
     },
   },
-  // Style all-day events
   '.rbc-allday-cell': {
     backgroundColor: theme.isDark ? 'rgba(132, 94, 194, 0.1)' : 'rgba(132, 94, 194, 0.05)',
     minHeight: '50px',
@@ -290,12 +286,10 @@ const StatCard = ({ icon: Icon, title, value, color, description }) => {
   );
 };
 
-// Create a component for the Zoom link card
 const ZoomCard = ({ zoomLink }) => {
   const { theme } = useTheme();
   const { translations } = useLanguage();
   
-  // Handle case when no zoom link is available
   if (!zoomLink) {
     return (
       <Card
@@ -350,7 +344,6 @@ const ZoomCard = ({ zoomLink }) => {
     );
   }
   
-  // When zoom link is available, make it clickable
   return (
     <Card
       component={motion.div}
@@ -362,7 +355,7 @@ const ZoomCard = ({ zoomLink }) => {
         p: 2,
         minHeight: { xs: 100, sm: 120 },
         borderRadius: 2,
-        background: `linear-gradient(135deg, #00A8B8 0%, #00A8B8dd 100%)`, // Zoom blue color
+        background: `linear-gradient(135deg, #00A8B8 0%, #00A8B8dd 100%)`, 
         backdropFilter: 'blur(10px)',
         color: 'white',
         boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
@@ -454,41 +447,27 @@ const Dashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [zoomLink, setZoomLink] = useState('');
   
-  // Check if device is mobile
   useEffect(() => {
     const checkIsMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
-    // Set initial value
     checkIsMobile();
-    
-    // Add event listener for window resize
     window.addEventListener('resize', checkIsMobile);
-    
-    // Cleanup
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
-  // Listen for sidebar state changes
   useEffect(() => {
-    // Function to handle sidebar state change events
     const handleSidebarChange = (event) => {
       if (event.detail && typeof event.detail.open === 'boolean') {
         setSidebarOpen(event.detail.open);
       }
     };
-
-    // Add event listener for sidebar state changes
     window.addEventListener('sidebar_state_change', handleSidebarChange);
-    
-    // Cleanup event listener
     return () => {
       window.removeEventListener('sidebar_state_change', handleSidebarChange);
     };
   }, []);
   
-  // Statistics
   const [stats, setStats] = useState({
     remainingClasses: 0,
     scheduledClasses: 0,
@@ -496,21 +475,18 @@ const Dashboard = () => {
     totalClasses: 0,
   });
 
-  // Add the yellow color constant for passed classes
   const COLORS = {
-    SCHEDULED: '#845EC2', // Purple
-    RESCHEDULED: '#FF6F91', // Pink/reddish
-    ATTENDED: '#FFCC29', // Yellow
+    SCHEDULED: '#845EC2', 
+    RESCHEDULED: '#FF6F91', 
+    ATTENDED: '#FFCC29', 
   };
 
-  // Define fetchStudentData outside useEffect so it can be called from other functions
   const fetchStudentData = async () => {
     if (!user) return;
     
     try {
       setLoading(true);
       
-      // Check if we have a valid student ID in the user object
       if (!user.student || !user.student.id) {
         console.error('User is missing student data or student ID');
         setLoading(false);
@@ -522,15 +498,10 @@ const Dashboard = () => {
         return;
       }
       
-      // Use student.id instead of user.id for API calls
       const studentId = user.student.id;
-      console.log('Using student ID for API calls:', studentId);
       
-      // Get the student details to get the zoom link
       try {
         const studentDetail = await studentAPI.getStudentById(studentId);
-        console.log('Student details:', studentDetail);
-        // Set the zoom link if available
         if (studentDetail && studentDetail.zoomLink) {
           setZoomLink(studentDetail.zoomLink);
         }
@@ -538,12 +509,10 @@ const Dashboard = () => {
         console.error('Error fetching student details:', error);
       }
       
-      // Fetch student's package information
       const studentPackages = await studentAPI.getStudentPackages(studentId);
       let activePackage = null;
       
       if (studentPackages && studentPackages.length > 0) {
-        // Find the active package or use the first one
         activePackage = studentPackages.find(pkg => pkg.status === 'active') || studentPackages[0];
         
         setPackageInfo({
@@ -557,7 +526,6 @@ const Dashboard = () => {
           startDate: activePackage.startDate
         });
       } else {
-        // No package found
         setPackageInfo({
           name: translations.noPackageAssigned || 'No Package Assigned',
           totalClasses: 0,
@@ -568,8 +536,6 @@ const Dashboard = () => {
           packageId: '',
           startDate: ''
         });
-        
-        // Set empty classes
         setClasses([]);
         setStats({
           remainingClasses: 0,
@@ -577,28 +543,21 @@ const Dashboard = () => {
           completedClasses: 0,
           totalClasses: 0
         });
-        
         setLoading(false);
         return;
       }
       
-      // Fetch student's classes with detailed information
       const studentClasses = await studentAPI.getStudentClasses(studentId);
-      console.log('DEBUG - Raw Student Classes Response:', JSON.stringify(studentClasses));
       
-      // IMPORTANT: Fetch rescheduled classes separately since they might not be included in studentClasses
       let reschedules = [];
       try {
         reschedules = await studentAPI.getStudentReschedules(studentId);
-        console.log('Fetched reschedules from API:', JSON.stringify(reschedules, null, 4));
       } catch (rescheduleError) {
         console.error('Error fetching reschedules:', rescheduleError);
       }
       
-      // IMPORTANT DEBUG CHECK
       if (!Array.isArray(studentClasses)) {
         console.error('Student classes is not an array!', typeof studentClasses, studentClasses);
-        // Set empty data instead of mock data
         setClasses([]);
         setStats({
           remainingClasses: 0,
@@ -615,20 +574,14 @@ const Dashboard = () => {
         return;
       }
       
-      // Initialize formattedClasses array
       let formattedClasses = [];
       
       if (studentClasses && studentClasses.length > 0) {
-        console.log('Student classes:', studentClasses.length, 'items');
-        console.log('First class sample:', JSON.stringify(studentClasses[0]));
-        
-        // Format regular classes
         formattedClasses = studentClasses.map(cls => {
           if (!cls) return null;
           
           let classTitle, classDate, classStartTime, classEndTime, classDescription, canReschedule, status;
           
-          // Extract the class data regardless of the structure
           if (cls.classDetail) {
             classTitle = cls.classDetail.title;
             classDate = cls.classDetail.date;
@@ -652,62 +605,36 @@ const Dashboard = () => {
             return null;
           }
           
-          // Special handling for rescheduled classes that might have different date format
           if (cls.start && cls.end && cls.start instanceof Date && cls.end instanceof Date) {
-            // The class already has parsed Date objects (common for rescheduled classes)
             classDate = moment(cls.start).format('YYYY-MM-DD');
             classStartTime = moment(cls.start).format('HH:mm:ss');
             classEndTime = moment(cls.end).format('HH:mm:ss');
-            
-            // These classes will use their direct date objects below
           }
           
-          // Handle status and reschedulability
           status = cls.status || 'scheduled';
           canReschedule = cls.canReschedule !== undefined ? cls.canReschedule : true;
           
-          // Rescheduled classes typically have this flag set to false
           if (cls.rescheduledFrom) {
             canReschedule = false;
-            status = 'scheduled'; // Mark as scheduled but with different color
+            status = 'scheduled'; 
           }
           
-          // Create dates from the string values or use directly if they're Date objects
           let startDate, endDate;
-                        try {
-                // Get the user's timezone for conversion
-                const userTimezone = user?.timezone || getCookie(COOKIE_NAMES.TIMEZONE);
-                console.log(`Converting class times for class ${cls.id}, user timezone: ${userTimezone}`);
-                
-                // Check if we already have Date objects
-                if (cls.start instanceof Date && cls.end instanceof Date) {
-                  // Even if we have Date objects, we should still convert them to ensure proper timezone
-                  const startStr = moment(cls.start).format('YYYY-MM-DD HH:mm:ss');
-                  const endStr = moment(cls.end).format('YYYY-MM-DD HH:mm:ss');
-                  
-                  // Convert using moment timezone
-                  const convertedStart = moment.tz(startStr, ADMIN_TIMEZONE).tz(userTimezone);
-                  const convertedEnd = moment.tz(endStr, ADMIN_TIMEZONE).tz(userTimezone);
-                  
-                  startDate = convertedStart.toDate();
-                  endDate = convertedEnd.toDate();
-                  
-                  console.log(`Converted existing Date objects:`, {
-                    originalStart: startStr,
-                    originalEnd: endStr,
-                    convertedStart: convertedStart.format('YYYY-MM-DD HH:mm:ss'),
-                    convertedEnd: convertedEnd.format('YYYY-MM-DD HH:mm:ss')
-                  });
-                } else {
-                  // Convert the times from admin timezone to user's selected timezone
-                  console.log(`Converting string times: Date=${classDate}, Start=${classStartTime}, End=${classEndTime}`);
-                  startDate = timezoneUtils.convertToUserTime(classDate, classStartTime, ADMIN_TIMEZONE, userTimezone).toDate();
-                  endDate = timezoneUtils.convertToUserTime(classDate, classEndTime, ADMIN_TIMEZONE, userTimezone).toDate();
-                  
-                  console.log(`Converted string times to: Start=${moment(startDate).format('YYYY-MM-DD HH:mm:ss')}, End=${moment(endDate).format('YYYY-MM-DD HH:mm:ss')}`);
-                }
+          try {
+            const userTimezone = user?.timezone || getCookie(COOKIE_NAMES.TIMEZONE);
             
-            // Check if dates are valid
+            if (cls.start instanceof Date && cls.end instanceof Date) {
+              const startStr = moment(cls.start).format('YYYY-MM-DD HH:mm:ss');
+              const endStr = moment(cls.end).format('YYYY-MM-DD HH:mm:ss');
+              const convertedStart = moment.tz(startStr, ADMIN_TIMEZONE).tz(userTimezone);
+              const convertedEnd = moment.tz(endStr, ADMIN_TIMEZONE).tz(userTimezone);
+              startDate = convertedStart.toDate();
+              endDate = convertedEnd.toDate();
+            } else {
+              startDate = timezoneUtils.convertToUserTime(classDate, classStartTime, ADMIN_TIMEZONE, userTimezone).toDate();
+              endDate = timezoneUtils.convertToUserTime(classDate, classEndTime, ADMIN_TIMEZONE, userTimezone).toDate();
+            }
+            
             if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
               throw new Error('Invalid date');
             }
@@ -716,45 +643,25 @@ const Dashboard = () => {
             return null;
           }
           
-          // Debug the class status
-          console.log(`Class ${cls.id || 'unknown'} status check:`, {
-            classId: cls.id,
-            status: status,
-            classDetail: cls.classDetail ? {
-              status: cls.classDetail.status,
-              date: cls.classDetail.date,
-              startTime: cls.classDetail.startTime,
-            } : 'no classDetail',
-            startDate: startDate,
-            now: new Date(),
-            isPast: startDate < new Date()
-          });
-          
-          // Determine color based on class status and reschedule flag
           let color;
-          
-          // Check if the class has already passed, regardless of status
           const isPastClass = startDate < new Date();
-          let shouldAllowReschedule = true; // Default to true unless explicitly set to false
+          let shouldAllowReschedule = true; 
 
-          // Handle explicit cases where rescheduling is not allowed
           if (cls.extendedProps?.canReschedule === false) {
             shouldAllowReschedule = false;
           }
 
-          // Only mark already rescheduled classes as non-reschedulable
           if (cls.rescheduledFrom) {
             shouldAllowReschedule = false;
           }
 
-          // Check both StudentClass.status and if the class is in the past to determine attended status
           if (status === 'attended' || (isPastClass && cls.classDetail?.status === 'completed')) {
-            color = COLORS.ATTENDED; // Use yellow for attended classes
+            color = COLORS.ATTENDED; 
             shouldAllowReschedule = false;
           } else if (cls.rescheduledFrom || !shouldAllowReschedule) {
-            color = COLORS.RESCHEDULED; // Use pink for classes that cannot be rescheduled
+            color = COLORS.RESCHEDULED; 
           } else {
-            color = COLORS.SCHEDULED; // Use purple for schedulable classes
+            color = COLORS.SCHEDULED; 
           }
           
           return {
@@ -773,16 +680,9 @@ const Dashboard = () => {
           };
         }).filter(Boolean);
         
-        // Now add the rescheduled classes from the reschedules endpoint
         if (Array.isArray(reschedules) && reschedules.length > 0) {
-          console.log(`Found ${reschedules.length} rescheduled classes to add`);
-
-          // Track the old class IDs that have been rescheduled to filter them out
           const rescheduledOldClassIds = new Set();
           const rescheduledNewClassIds = new Set();
-
-          // Process reschedules to identify which classes have been replaced
-          // We need to handle chains of reschedules (A -> B -> C)
           const rescheduleMap = new Map();
 
           reschedules.forEach(reschedule => {
@@ -792,16 +692,13 @@ const Dashboard = () => {
               }
               if (reschedule.newClass && reschedule.newClass.id) {
                 rescheduledNewClassIds.add(reschedule.newClass.id);
-                // Track the mapping from old to new
                 rescheduleMap.set(reschedule.oldClassId, reschedule.newClass.id);
               }
             }
           });
 
-          // Find the final class in each reschedule chain
           const finalClassIds = new Set();
           rescheduleMap.forEach((newId, oldId) => {
-            // Follow the chain to find the final destination
             let currentId = newId;
             while (rescheduleMap.has(currentId)) {
               currentId = rescheduleMap.get(currentId);
@@ -809,56 +706,34 @@ const Dashboard = () => {
             finalClassIds.add(currentId);
           });
 
-          console.log('Rescheduled old class IDs:', Array.from(rescheduledOldClassIds));
-          console.log('Rescheduled new class IDs:', Array.from(rescheduledNewClassIds));
-
-          // Filter out old classes that have been rescheduled - we don't want to show them
-          const beforeFilterCount = formattedClasses.length;
           formattedClasses = formattedClasses.filter(cls => {
             const shouldKeep = !rescheduledOldClassIds.has(cls.id);
-            if (!shouldKeep) {
-              console.log(`Removing old rescheduled class: ${cls.id} (${cls.title})`);
-            }
             return shouldKeep;
           });
-          console.log(`After removing rescheduled old classes: ${beforeFilterCount} -> ${formattedClasses.length}`);
 
-          // Map rescheduled classes to the same format
-          // Only include the final class in each reschedule chain
           const rescheduledClassesFormatted = reschedules
             .filter(reschedule => {
-              // Only process confirmed reschedules with valid new class data
               if (reschedule.status !== 'confirmed' || !reschedule.newClass) {
                 return false;
               }
-
               const newClass = reschedule.newClass;
-
-              // Only include classes that are the final destination in their reschedule chain
               const isFinalClass = finalClassIds.has(newClass.id) || !rescheduledOldClassIds.has(newClass.id);
               if (!isFinalClass) {
-                console.log(`Skipping intermediate rescheduled class ${newClass.id}`);
                 return false;
               }
-
-              // Skip if this class ID is already in formattedClasses
               const alreadyExists = formattedClasses.some(cls => cls.id === newClass.id);
               if (alreadyExists) {
-                console.log(`Skipping rescheduled class ${newClass.id} as it's already in the list`);
                 return false;
               }
-
               return true;
             })
             .map(reschedule => {
               const newClass = reschedule.newClass;
-
               let startDate, endDate;
               try {
                 startDate = new Date(`${newClass.date}T${newClass.startTime}`);
                 endDate = new Date(`${newClass.date}T${newClass.endTime}`);
               
-              // Check if dates are valid
               if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
                 throw new Error('Invalid date for rescheduled class');
               }
@@ -876,7 +751,7 @@ const Dashboard = () => {
               extendedProps: {
                 description: newClass.description || 'Rescheduled class',
                 status: 'scheduled',
-                canReschedule: false, // Rescheduled classes can't be rescheduled again
+                canReschedule: false, 
                 packageId: reschedule.studentPackageId,
                 rescheduledFrom: reschedule.oldClassId,
                 isRescheduled: true
@@ -884,93 +759,42 @@ const Dashboard = () => {
             };
           }).filter(Boolean);
           
-          // Add the rescheduled classes to the formattedClasses array
           formattedClasses = [...formattedClasses, ...rescheduledClassesFormatted];
-          console.log(`After adding rescheduled classes, total classes: ${formattedClasses.length}`);
-        }
-        
-        console.log('DEBUG - Formatted Classes:', formattedClasses.length, 'items');
-        console.log('First formatted class:', formattedClasses.length > 0 ? JSON.stringify(formattedClasses[0]) : 'None');
-
-        // Debug information to help track missing classes
-        const scheduledClasses = formattedClasses.filter(cls => cls.extendedProps.status === 'scheduled');
-        const rescheduledClasses = formattedClasses.filter(cls => cls.extendedProps.rescheduledFrom);
-        
-        console.log('Scheduled classes:', scheduledClasses.length);
-        console.log('Rescheduled classes:', rescheduledClasses.length);
-        // Add more detailed logging for rescheduled classes
-        if (rescheduledClasses.length > 0) {
-          console.log('Rescheduled class example:', JSON.stringify(rescheduledClasses[0]));
         }
         
         if (formattedClasses.length === 0) {
           console.warn('No classes could be formatted properly. Using mock data instead.');
           setClasses([]);
         } else {
-          // Get the active package ID if available
           const activePackageId = activePackage?.id;
-          console.log('Active package ID for filtering:', activePackageId);
-        
-          // Filter for current package classes only if we have an active package
           let currentPackageClasses = formattedClasses;
           
           if (activePackageId) {
-            // Log before filtering
-            console.log('Before filtering, classes count:', formattedClasses.length);
-            
-            // Apply the filter for active package
             currentPackageClasses = formattedClasses.filter(cls => {
-              // Special handling for rescheduled classes which might not have packageId set correctly
               if (cls.extendedProps.rescheduledFrom) {
-                // Consider rescheduled classes as part of the current package by default
                 return true;
               }
-              
               const match = !cls.extendedProps.packageId || 
                 cls.extendedProps.packageId == activePackageId;
-              
-              if (!match) {
-                console.log('Excluding class with package ID:', cls.extendedProps.packageId);
-              }
               return match;
             });
-            
-            // Log after filtering
-            console.log('After filtering, classes count:', currentPackageClasses.length, 
-              'Classes filtered out:', formattedClasses.length - currentPackageClasses.length);
           }
           
-          // Update the classes state with the formatted events
           setClasses(currentPackageClasses);
           
-          // Check if all reschedule turns are used
           const noRescheduleCreditsLeft = activePackage && 
             activePackage.package?.maxReschedules && 
             activePackage.usedReschedules >= activePackage.package.maxReschedules;
 
-          console.log('Reschedule credits check:', {
-            maxReschedules: activePackage?.package?.maxReschedules,
-            usedReschedules: activePackage?.usedReschedules,
-            noRescheduleCreditsLeft: noRescheduleCreditsLeft
-          });
-
-          // If no reschedule credits left, update all colors, but only for non-rescheduled original classes
           if (noRescheduleCreditsLeft) {
-            console.log('No reschedule credits left, making regular classes non-reschedulable');
-            
-            // Only mark original classes as non-reschedulable, not classes that have already been rescheduled
             currentPackageClasses = currentPackageClasses.map(cls => {
-              // Skip classes that:
-              // 1. Are already attended
-              // 2. Are already rescheduled from another class
-              // 3. Already have an explicit canReschedule=false setting
               if (cls.extendedProps.status === 'scheduled' && 
                   !cls.extendedProps.rescheduledFrom &&
                   cls.extendedProps.canReschedule !== false) {
                   
                 return {
                   ...cls,
-                  color: COLORS.RESCHEDULED, // use reddish color
+                  color: COLORS.RESCHEDULED, 
                   extendedProps: {
                     ...cls.extendedProps,
                     canReschedule: false,
@@ -980,25 +804,18 @@ const Dashboard = () => {
               }
               return cls;
             });
-            
-            // Re-set classes with updated colors
             setClasses(currentPackageClasses);
           } else {
-            // If we have reschedule credits, ensure classes are properly marked
             currentPackageClasses = currentPackageClasses.map(cls => {
-              // Skip any class that is explicitly marked as non-reschedulable for other reasons
-              // or that has been rescheduled from another class
               if (cls.extendedProps.rescheduledFrom || 
                   cls.extendedProps.status === 'attended') {
                 return cls;
               }
               
-              // Check if the class is within the reschedule window
               const classDate = new Date(cls.start);
               const now = new Date();
               const hoursDiff = (classDate - now) / (1000 * 60 * 60);
               
-              // Only make it reschedulable if it's at least 2 hours before the class
               if (hoursDiff >= 2) {
                 return {
                   ...cls,
@@ -1009,7 +826,6 @@ const Dashboard = () => {
                   }
                 };
               } else {
-                // Class is too soon to reschedule
                 return {
                   ...cls,
                   color: COLORS.RESCHEDULED,
@@ -1021,11 +837,9 @@ const Dashboard = () => {
                 };
               }
             });
-            
             setClasses(currentPackageClasses);
           }
           
-          // Calculate class statistics
           const scheduledClasses = currentPackageClasses.filter(
             cls => cls.extendedProps.status === 'scheduled'
           ).length;
@@ -1034,10 +848,8 @@ const Dashboard = () => {
             cls => cls.extendedProps.status === 'attended'
           ).length;
           
-          // Calculate remaining classes - this is the total scheduled classes
           const totalScheduledAndAttended = scheduledClasses + completedClasses;
           
-          // Update stats with accurate counts
           setStats({
             remainingClasses: currentPackageClasses.filter(
               cls => cls.extendedProps.status === 'scheduled'
@@ -1047,7 +859,6 @@ const Dashboard = () => {
             totalClasses: totalScheduledAndAttended
           });
           
-          // Set calendar initial date to today or first upcoming class
           const upcomingClasses = currentPackageClasses.filter(cls => {
             const classStart = new Date(cls.start);
             return classStart > new Date() && cls.extendedProps.status === 'scheduled';
@@ -1060,8 +871,6 @@ const Dashboard = () => {
           }
         }
       } else {
-        // Set empty classes array and update stats
-        console.log('No classes returned from API.');
         setClasses([]);
         setStats({
           remainingClasses: 0,
@@ -1072,8 +881,6 @@ const Dashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching student data:', error);
-      
-      // Show error message to user
       setClasses([]);
       setStats({
         remainingClasses: 0,
@@ -1081,7 +888,6 @@ const Dashboard = () => {
         completedClasses: 0,
         totalClasses: 0
       });
-      
       setMessage({
         open: true,
         text: translations.errorLoadingData || 'Error loading your data.',
@@ -1094,19 +900,13 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchStudentData();
-    
-    // Refresh every minute to ensure class status and remaining classes are up-to-date
     const interval = setInterval(fetchStudentData, 60 * 1000);
     
-    // Add event listener for cross-component synchronization
     const handleDataSync = () => {
-      console.log('Dashboard received yekacoucha_data_changed event - refreshing data');
       fetchStudentData();
     };
     
-    // Add event listener for timezone changes
     const handleTimezoneChange = (event) => {
-      console.log('Dashboard received timezone change event - refreshing data');
       fetchStudentData();
     };
     
@@ -1121,14 +921,12 @@ const Dashboard = () => {
   }, [user, translations]);
 
   const isWithinRescheduleWindow = (classTime) => {
-    // Check if the class is more than 2 hours away
     const now = moment();
     const classStart = moment(classTime);
     return classStart.diff(now, 'hours') >= 2;
   };
 
   const canRescheduleClass = (event) => {
-    // Check if the class is within reschedule window
     if (!isWithinRescheduleWindow(event.start)) {
       return {
         canReschedule: false,
@@ -1136,7 +934,6 @@ const Dashboard = () => {
       };
     }
     
-    // Check if the student has reschedule credits remaining
     if (packageInfo.rescheduleRemaining <= 0) {
       return {
         canReschedule: false,
@@ -1144,7 +941,6 @@ const Dashboard = () => {
       };
     }
 
-    // Check if the class itself is allowed to be rescheduled
     if (event.extendedProps && event.extendedProps.canReschedule === false) {
       return {
         canReschedule: false,
@@ -1152,7 +948,6 @@ const Dashboard = () => {
       };
     }
     
-    // Check by color - if it's already pink/reddish, it can't be rescheduled
     if (event.color === COLORS.RESCHEDULED) {
       return {
         canReschedule: false,
@@ -1160,7 +955,6 @@ const Dashboard = () => {
       };
     }
     
-    // Check if the class has been attended
     if (event.extendedProps && event.extendedProps.status === 'attended') {
       return {
         canReschedule: false,
@@ -1175,7 +969,6 @@ const Dashboard = () => {
   };
 
   const handleReschedule = async (event) => {
-    // First check if class can be rescheduled
     const rescheduleCheck = canRescheduleClass(event);
     
     if (!rescheduleCheck.canReschedule) {
@@ -1187,36 +980,31 @@ const Dashboard = () => {
       return;
     }
     
-    // Calculate the original duration for the modal
-    let duration = 60; // Default duration in minutes
+    let duration = 60; 
     if (event.start instanceof Date && event.end instanceof Date) {
       duration = moment(event.end).diff(moment(event.start), 'minutes');
     }
     
-    // Create a complete event object with all required fields for the RescheduleModal
     const completeEvent = {
       ...event,
-      studentId: user?.student?.id, // Explicitly add studentId
+      studentId: user?.student?.id, 
       studentPackageId: event.extendedProps?.packageId,
       classDetail: {
         date: moment(event.start).format('YYYY-MM-DD'),
         startTime: moment(event.start).format('HH:mm:ss'),
         endTime: moment(event.end).format('HH:mm:ss'),
         title: event.title,
-        teacherId: event.extendedProps?.teacherId // Include teacherId if available
+        teacherId: event.extendedProps?.teacherId 
       },
       extendedProps: {
         ...event.extendedProps,
         packageEndDate: packageInfo.validUntil,
         duration: duration,
-        studentId: user?.student?.id, // Duplicate studentId in extendedProps for safety
-        packageInfo: packageInfo // Include full package info for fallback
+        studentId: user?.student?.id, 
+        packageInfo: packageInfo 
       }
     };
     
-    console.log('Complete event object for rescheduling:', JSON.stringify(completeEvent, null, 2));
-    
-    // Set the selected event with all necessary data
     setSelectedEvent(completeEvent);
     setRescheduleOpen(true);
   };
@@ -1229,47 +1017,20 @@ const Dashboard = () => {
       return;
     }
     
-    // Start loading state
     setLoading(true);
     
     try {
-      console.log('Rescheduling class with ID:', selectedEvent.id, 'to new date:', selectionData.selectedDate);
-      
-      // Extract the student ID from the user object or class data
       const studentId = user?.student?.id || selectedEvent?.extendedProps?.studentId;
       
       if (!studentId) {
         throw new Error('Student ID not found. Cannot reschedule class.');
       }
       
-      // Get the user's current timezone
       const userTimezone = user?.timezone || getCookie(COOKIE_NAMES.TIMEZONE);
-      console.log('User timezone for reschedule:', userTimezone);
-      
-      // IMPORTANT: selectionData already contains dates that were converted to admin timezone
-      // in the RescheduleModalContainer.jsx. We need to use these directly to avoid double conversion.
-      
-      // Extract the date and time directly from selectionData
       const formattedDate = moment(selectionData.date).format('YYYY-MM-DD');
       const formattedStartTime = selectionData.startTime;
       const formattedEndTime = selectionData.endTime;
       
-      console.log('Using pre-converted dates from selectionData:', {
-        date: formattedDate,
-        startTime: formattedStartTime,
-        endTime: formattedEndTime
-      });
-      
-      console.log('Timezone info for reschedule:', { 
-        userTimezone,
-        adminTimezone: ADMIN_TIMEZONE,
-        selectedDate: selectionData.selectedDate,
-        date: formattedDate,
-        startTime: formattedStartTime,
-        endTime: formattedEndTime
-      });
-      
-      // Format the new class data with admin timezone values
       const newClassData = {
         date: formattedDate,
         startTime: formattedStartTime,
@@ -1278,17 +1039,12 @@ const Dashboard = () => {
         timezone: ADMIN_TIMEZONE
       };
       
-      // Use the API's createRescheduleRecord endpoint which is correctly implemented on the server
-      // Extract teacherId from selectionData if available, otherwise use the default teacher
       const teacherId = selectionData.teacherId || selectedEvent?.classDetail?.teacherId;
-      
-      console.log('Using teacher ID for reschedule:', teacherId, 'Is different teacher:', selectionData.differentTeacher);
       
       if (!teacherId) {
         throw new Error(translations.noTeacherSpecified || 'No teacher was specified for the rescheduled class.');
       }
       
-      // Add info about different teacher for notification message
       const isDifferentTeacher = selectionData.differentTeacher;
       const teacherName = selectionData.teacher ? `${selectionData.teacher.firstName} ${selectionData.teacher.lastName}` : 'another teacher';
       
@@ -1296,29 +1052,20 @@ const Dashboard = () => {
         studentId,
         selectedEvent.id,
         newClassData,
-        teacherId, // Pass the teacher ID
-        selectionData.differentTeacher // Pass the differentTeacher flag
+        teacherId, 
+        selectionData.differentTeacher 
       );
       
-      console.log('Reschedule API response:', JSON.stringify(result));
-      
       if (result && (result.success || result.message === 'Class rescheduled successfully')) {
-        // Update package info with decremented reschedule credits
         setPackageInfo(prev => ({
           ...prev,
           rescheduleRemaining: Math.max(0, prev.rescheduleRemaining - 1)
         }));
         
-        // Small delay to ensure the server has processed the change
         await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Refresh the calendar events
         await fetchStudentData();
-        
-        // Dispatch an event to notify other components about the data change
         window.dispatchEvent(new Event('yekacouchacademy_data_changed'));
         
-        // Show success message with teacher information if applicable
         setMessage({
           open: true,
           text: isDifferentTeacher 
@@ -1351,14 +1098,11 @@ const Dashboard = () => {
   };
   
   const handleEventClick = (event) => {
-    // Check if the class can be rescheduled before showing the reschedule option
     const rescheduleCheck = canRescheduleClass(event);
     
-    // If it's a class that can be rescheduled, allow rescheduling
     if (rescheduleCheck.canReschedule) {
       handleReschedule(event);
     } else {
-      // Otherwise just show a message explaining why it can't be rescheduled
       setMessage({
         open: true,
         text: rescheduleCheck.reason || translations.cannotReschedule || 'This class cannot be rescheduled',
@@ -1368,10 +1112,7 @@ const Dashboard = () => {
   };
   
   const handleRescheduleSuccess = () => {
-    // Refresh data after successful reschedule
     fetchStudentData();
-    
-    // Show success message
     setMessage({
       open: true,
       text: translations.rescheduleSuccess || 'Class rescheduled successfully',
@@ -1379,23 +1120,19 @@ const Dashboard = () => {
     });
   };
 
-  // Add a function to close the message
   const handleCloseMessage = () => {
     setMessage({ ...message, open: false });
   };
 
-  // Add a function to toggle fullscreen
   const toggleFullScreen = () => {
     setIsFullScreen(!isFullScreen);
     
-    // When entering fullscreen mode, let the sidebar know to get out of the way
     if (!isFullScreen) {
       const event = new CustomEvent('dashboard_fullscreen', {
         detail: { fullscreen: true }
       });
       window.dispatchEvent(event);
     } else {
-      // When exiting fullscreen, reset sidebar visibility
       const event = new CustomEvent('dashboard_fullscreen', {
         detail: { fullscreen: false }
       });
@@ -1412,7 +1149,7 @@ const Dashboard = () => {
       gap: 2,
       transition: COMMON_TRANSITION,
       p: { xs: 2, sm: 3, md: 4 },
-      pt: { xs: '60px', sm: 3, md: 4 }, // Keep top padding for mobile menu
+      pt: { xs: '60px', sm: 3, md: 4 }, 
       boxSizing: 'border-box',
       maxWidth: '1600px',
       mx: 'auto',
@@ -1439,7 +1176,6 @@ const Dashboard = () => {
             {translations.welcomeMessage || 'Welcome back'}, {user?.firstName || 'Student'}!
           </Typography>
 
-          {/* Stats Cards - Update Grid to be more responsive */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} sm={6} md={3}>
               <StatCard
@@ -1476,7 +1212,6 @@ const Dashboard = () => {
                 sx={{ height: '100%', borderRadius: 3, boxShadow: '0 6px 15px rgba(0,0,0,0.08)' }}
               />
             </Grid>
-            {/* Package Expiration Date Card */}
             <Grid item xs={12}>
               <Card sx={{
                 p: 2.5,
@@ -1564,7 +1299,6 @@ const Dashboard = () => {
         </>
       )}
 
-      {/* Class Schedule Section - Improved Design */}
       <Box sx={{ mt: 4 }}>
         <Typography variant="h5" sx={{ 
           fontWeight: 700,
@@ -1578,7 +1312,6 @@ const Dashboard = () => {
           {translations.myClasses || 'My Classes'}
         </Typography>
 
-        {/* Tab navigation with buttons */}
         <Box sx={{ 
           mb: 3,
           display: 'flex',
@@ -1624,7 +1357,6 @@ const Dashboard = () => {
           </Button>
         </Box>
         
-        {/* Loading state */}
         {loading ? (
           <Box sx={{ 
             display: 'flex', 
@@ -1640,9 +1372,7 @@ const Dashboard = () => {
             </Typography>
           </Box>
         ) : classes.length > 0 ? (
-          /* Render classes with proper filtering */
           <Grid container spacing={3}>
-            {/* Filter and sort classes based on view */}
             {classes
               .filter(cls => {
                 const now = new Date();
@@ -1655,20 +1385,17 @@ const Dashboard = () => {
               .sort((a, b) => {
                 return view === 'upcoming' 
                   ? new Date(a.start) - new Date(b.start)
-                  : new Date(b.start) - new Date(a.start);
+                  : new Date(b.sort) - new Date(a.start);
               })
-              .slice(0, 6) // Limit to 6 classes per page to avoid too much scrolling
+              .slice(0, 6) 
               .map((cls, index) => {
-                // Use the user's timezone for displaying dates
                 const userTimezone = user?.timezone || getCookie(COOKIE_NAMES.TIMEZONE);
-                                  const classDate = moment(cls.start).tz(userTimezone).locale(language).format(translations.shortDateFormat || 'dddd, MMMM D');
+                  const classDate = moment(cls.start).tz(userTimezone).locale(language).format(translations.shortDateFormat || 'dddd, MMMM D');
                   const classTime = `${moment(cls.start).tz(userTimezone).format(translations.timeFormat || 'h:mm A')} - ${moment(cls.end).tz(userTimezone).format(translations.timeFormat || 'h:mm A')}`;
                 
-                // Determine status style
-                // If viewing past classes, always use "passed" status
                 const isPast = view === 'past';
                 const statusColor = isPast
-                  ? COLORS.ATTENDED // Use yellow color for all past classes
+                  ? COLORS.ATTENDED 
                   : cls.extendedProps.status === 'attended' 
                     ? COLORS.ATTENDED 
                     : cls.extendedProps.rescheduledFrom 
@@ -1683,10 +1410,7 @@ const Dashboard = () => {
                       ? (translations.rescheduled || 'Rescheduled')
                       : (translations.scheduled || 'Scheduled');
                     
-                // Check if class can be rescheduled
                 const rescheduleCheck = canRescheduleClass(cls);
-                
-                // Check if it's next class (first upcoming)
                 const isNextClass = view === 'upcoming' && index === 0;
                 
                 return (
@@ -1712,7 +1436,6 @@ const Dashboard = () => {
                         position: 'relative'
                       }}
                     >
-                      {/* Status indicator as top banner */}
                       <Box sx={{ 
                         bgcolor: statusColor,
                         color: '#fff',
@@ -1725,7 +1448,6 @@ const Dashboard = () => {
                         <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
                           {statusText}
                         </Typography>
-                        {/* Only show the relative time for upcoming classes */}
                         {view === 'upcoming' && cls.extendedProps.status !== 'attended' && (
                           <Typography variant="caption" sx={{ fontWeight: 'medium' }}>
                             {moment(cls.start).tz(userTimezone).fromNow()}
@@ -1733,7 +1455,6 @@ const Dashboard = () => {
                         )}
                       </Box>
                       
-                      {/* Main content */}
                       <CardContent sx={{ 
                         p: isNextClass ? 3 : 2,
                         flex: 1,
@@ -1800,7 +1521,6 @@ const Dashboard = () => {
                           )}
                         </Box>
                         
-                        {/* Action buttons */}
                         {view === 'upcoming' && cls.extendedProps.status !== 'attended' && (
                           <Box sx={{ 
                             display: 'flex', 
@@ -1854,7 +1574,6 @@ const Dashboard = () => {
               })
             }
             
-            {/* Show "No classes" message when filtered list is empty */}
             {classes.filter(cls => {
               const now = new Date();
               return view === 'upcoming' ? new Date(cls.start) >= now : new Date(cls.start) < now;
@@ -1904,7 +1623,6 @@ const Dashboard = () => {
             )}
           </Grid>
         ) : (
-          /* No classes at all message */
           <Card sx={{
             display: 'flex', 
             flexDirection: 'column', 
@@ -1930,7 +1648,6 @@ const Dashboard = () => {
         )}
       </Box>
 
-      {/* Reschedule Modal */}
       <RescheduleModal
         open={rescheduleOpen}
         onClose={() => setRescheduleOpen(false)}
@@ -1943,14 +1660,13 @@ const Dashboard = () => {
         theme={theme}
       />
       
-      {/* Snackbar for messages */}
       <Snackbar
         open={message.open}
         autoHideDuration={6000}
         onClose={() => setMessage({...message, open: false})}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         sx={{
-          zIndex: 9999, // Ensure it appears above modals
+          zIndex: 9999,
         }}
       >
         <Alert 
@@ -1961,7 +1677,7 @@ const Dashboard = () => {
           sx={{ 
             width: '100%',
             borderRadius: 2,
-            zIndex: 9999, // Ensure alert appears above modals
+            zIndex: 9999, 
             '& .MuiAlert-message': {
               fontSize: '0.9rem'
             }

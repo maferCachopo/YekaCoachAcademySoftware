@@ -33,12 +33,7 @@ export const formatPackage = (student, theme, translations) => {
             const packageScheduledClasses = scheduledClasses.filter(c => c.studentPackageId === packageId);
             const scheduledClassesCount = packageScheduledClasses.length;
             
-            console.log('DEBUG - Table formatPackage (inactive) - Scheduled classes count:', {
-              studentId: student.id,
-              packageId,
-              scheduledClassesCount,
-              storedRemainingClasses: packageWithScheduledClasses.remainingClasses
-            });
+           
             
             // Override the active package for display purposes
             return (
@@ -74,12 +69,7 @@ export const formatPackage = (student, theme, translations) => {
         cls => cls.studentPackageId === activePackage.id && cls.status === 'scheduled'
       ).length;
       
-      console.log('DEBUG - Table formatPackage - Scheduled classes count:', {
-        studentId: student.id,
-        packageId: activePackage.id,
-        scheduledClassesCount,
-        storedRemainingClasses: activePackage.remainingClasses
-      });
+    
       
       return scheduledClassesCount;
     }

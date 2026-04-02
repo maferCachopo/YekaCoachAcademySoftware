@@ -51,27 +51,23 @@ export function AuthProvider({ children }) {
       try {
         // Check if we have a stored user
         const storedUser = getUser();
-        console.log('DEBUG - AuthContext - Stored user from getUser():', storedUser);
         
         // Check for timezone in cookies
         const cookieTimezone = getCookie(COOKIE_NAMES.TIMEZONE);
         
         // If no timezone is set in cookies, set it to admin timezone
         if (!cookieTimezone) {
-          console.log('DEBUG - AuthContext - Setting default admin timezone:', ADMIN_TIMEZONE);
           setCookie(COOKIE_NAMES.TIMEZONE, ADMIN_TIMEZONE);
         }
         
         if (storedUser) {
           // Always override user timezone with cookie timezone if available
           if (cookieTimezone) {
-            console.log('DEBUG - Overriding user timezone with cookie timezone:', cookieTimezone);
             storedUser.timezone = cookieTimezone;
             // Update stored user with timezone
             storeUser(storedUser, localStorage.getItem('token') !== null);
           }
           
-          console.log('DEBUG - AuthContext - Setting user from storage with teacherId:', storedUser.teacherId);
           setUser(storedUser);
         } else {
           // Try to fetch current user if token exists but no stored user
@@ -79,9 +75,7 @@ export function AuthProvider({ children }) {
           
           if (token && !isTokenExpired()) {
             try {
-              console.log('DEBUG - AuthContext - Fetching current user with token');
               const userData = await authAPI.getCurrentUser();
-              console.log('DEBUG - AuthContext - Received user data from API:', userData);
               
               // If we have a timezone in cookies but not in user data, add it
               if (cookieTimezone && !userData.timezone) {
@@ -133,34 +127,22 @@ export function AuthProvider({ children }) {
     setError(null); // Clear any previous errors
     
     try {
-      console.log('LOGIN DEBUG - Login attempt with username:', credentials.username);
       const response = await authAPI.login(credentials, loginType);
       const { token, user } = response;
       
-      console.log('LOGIN DEBUG - Login successful, received user:', {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        hasStudentData: !!user.student
-      });
-      
+     
       // If this is a student but missing student data, fetch it
       if (user.role === 'student' && !user.student) {
-        console.log('LOGIN DEBUG - Student user is missing student data, fetching it');
         try {
           // Fetch current user which should include student data
           const currentUserData = await authAPI.getCurrentUser();
-          console.log('LOGIN DEBUG - Fetched current user with student data:', {
-            userId: currentUserData.id,
-            studentId: currentUserData.student?.id
-          });
+          
           
           // Use the enhanced user data with student information
           if (currentUserData.student) {
             user.student = currentUserData.student;
           }
         } catch (err) {
-          console.error('LOGIN DEBUG - Failed to fetch student data:', err);
           // Check if the account is inactive
           if (err.error === 'account_inactive') {
             const errorMessage = err.message || translations?.accountInactive || 'Your account has been deactivated by the administrator.';

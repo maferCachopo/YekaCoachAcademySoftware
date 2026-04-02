@@ -169,6 +169,7 @@ const AddDialog = ({
   const [availableTimezones, setAvailableTimezones] = useState(moment.tz.names());
   const [searchOptions, setSearchOptions] = useState([]); // Opciones del desplegable
   const [isFetching, setIsFetching] = useState(false); // Estado de carga
+  const regexEmail = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
 
   // Estados para el algoritmo de fases
   const [currentPhase, setCurrentPhase] = useState(1);
@@ -462,6 +463,10 @@ const handleSelectCity = async (cityItem) => {
   const validateForm = () => {
     if (!formData.name || !formData.surname || !formData.email || !formData.username || !formData.password) {
       setMessage({ open: true, text: translations.fillRequiredFields || 'Por favor completa todos los campos obligatorios', severity: 'error' });
+      return false;
+    }
+    if(!regexEmail.test(formData.email)){
+        setMessage({ open: true, text: translations.fillRequiredFields || 'Formato de correo invalido', severity: 'error' });
       return false;
     }
     if (formData.password !== formData.confirmPassword) {

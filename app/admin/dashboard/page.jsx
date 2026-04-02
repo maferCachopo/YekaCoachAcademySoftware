@@ -500,7 +500,6 @@ export default function AdminDashboard() {
         
         // Get dashboard stats
         const statsData = await adminAPI.getDashboardStats();
-        console.log("Stats recibidos del server:", statsData); 
         
         // Get reschedule data separately to ensure complete data
         const reschedules = await adminAPI.getRescheduledClasses();

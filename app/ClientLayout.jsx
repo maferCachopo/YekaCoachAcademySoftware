@@ -32,7 +32,6 @@ export default function ClientLayout({ children }) {
     const checkServer = async () => {
       try {
         const result = await checkServerConnection();
-        console.log('Server check result:', result);
         
         setServerStatus({
           checking: false,
@@ -53,7 +52,6 @@ export default function ClientLayout({ children }) {
     
     // Increase timeout from 5 to 10 seconds to allow more time for server to start
     const timeoutId = setTimeout(() => {
-      console.log('Timeout reached, continuing to app');
       setTimeoutReached(true);
     }, 10000);
     

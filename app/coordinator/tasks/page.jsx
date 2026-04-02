@@ -144,7 +144,6 @@ export default function TaskManagement() {
           const teachersData = await fetchWithAuth('/coordinator/teachers');
           if (teachersData && Array.isArray(teachersData)) {
             setTeachers(teachersData);
-            console.log('Loaded', teachersData.length, 'teachers');
           } else {
             console.warn('Invalid teachers data format:', teachersData);
             // Don't use mock data as fallback
@@ -162,9 +161,7 @@ export default function TaskManagement() {
           const tasksData = await fetchWithAuth('/coordinator/tasks');
           if (tasksData && Array.isArray(tasksData)) {
             setTasks(tasksData);
-            console.log('Loaded', tasksData.length, 'tasks');
           } else {
-            console.warn('Invalid tasks data format:', tasksData);
             setTasks([]);
           }
         } catch (err) {
@@ -262,7 +259,6 @@ export default function TaskManagement() {
         })
       });
       
-      console.log('Task creation response:', response);
       
       // Verify we have a valid task object
       if (!response || !response.id) {

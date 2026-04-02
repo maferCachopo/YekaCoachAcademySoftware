@@ -17,7 +17,6 @@ export default function ThemeToggle() {
         setStoredTheme(localTheme);
         
         // Log theme state for debugging
-        console.log(`Theme Toggle - Current mode: ${mode}, localStorage: ${localTheme}`);
         
         if (localTheme !== mode && !isFirstRender) {
           console.warn(`Theme mismatch - context: ${mode}, localStorage: ${localTheme}`);

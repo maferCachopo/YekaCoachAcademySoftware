@@ -202,17 +202,14 @@ export default function ExamsManagement() {
     
     // Special handling for responseType changes
     if (field === 'responseType') {
-      console.log(`Changed question ${index} type to: ${value}`);
       
       // If changing to true/false, set options to ["True", "False"]
       if (value === 'true_false') {
-        console.log(`Setting true/false options for question ${index}`);
         newQuestions[index].options = ['True', 'False'];
         newQuestions[index].correctAnswer = ''; // Reset the correct answer
       } 
       // If changing to multiple choice and options are empty or have fewer than 2 options
       else if (value === 'multiple_choice') {
-        console.log(`Setting multiple choice options for question ${index}`);
         // Keep existing options if they exist and have at least 2 options
         if (!newQuestions[index].options || newQuestions[index].options.length < 2) {
           newQuestions[index].options = ['', '', '', ''];
@@ -221,7 +218,6 @@ export default function ExamsManagement() {
       }
       // If changing to short or long answer, clear options
       else {
-        console.log(`Clearing options for question ${index} (${value})`);
         newQuestions[index].options = [];
         newQuestions[index].correctAnswer = '';
       }
@@ -290,7 +286,6 @@ export default function ExamsManagement() {
       }
       
       // Handle specific question types
-      console.log(`Validating question ${i+1}, type: ${q.responseType}`, q);
       
       if (q.responseType === 'multiple_choice') {
         // Check if options exist and none are empty
@@ -315,7 +310,6 @@ export default function ExamsManagement() {
         const newQuestions = [...questions];
         if (!q.options || !Array.isArray(q.options) || q.options.length !== 2 || 
             !q.options.includes('True') || !q.options.includes('False')) {
-          console.log(`Fixing true/false options for question ${i+1}`);
           newQuestions[i].options = ['True', 'False'];
           setQuestions(newQuestions);
         }

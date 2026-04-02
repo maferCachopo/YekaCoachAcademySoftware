@@ -54,7 +54,6 @@ export default function InternalLoginPage() {
     
     try {
       const result = await login(data, rememberMe, 'internal');
-      console.log('DEBUG - Internal Login page - Login result:', result);
       
       if (!result.success) {
         // Check if this is a wrong portal error - show generic message for security

@@ -32,7 +32,6 @@ const NextjsLogoCleaner = () => {
           elements.forEach(element => {
             if (element && element.parentNode) {
               element.parentNode.removeChild(element);
-              console.log(`Removed Next.js element with selector: ${selector}`);
             }
           });
         } catch (e) {

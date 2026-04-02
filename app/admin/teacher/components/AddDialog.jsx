@@ -250,12 +250,7 @@ export default function AddDialog({ open, onClose, setMessage, refreshTeachers }
         }
       });
 
-      // Debug logs
-      console.log('Sending teacher data:', {
-        workHours: workHoursData,
-        breakHours: breakHoursData,
-        specialties: formData.specialties || []
-      });
+      
 
       const requestBody = {
         username: formData.email,
@@ -272,8 +267,7 @@ export default function AddDialog({ open, onClose, setMessage, refreshTeachers }
         workingDays: formData.workingDays
       };
 
-      console.log('Full request body:', JSON.stringify(requestBody, null, 2));
-      console.log('Sending POST request to /api/teachers...');
+      
 
       const response = await fetchWithAuth('/teachers', {
         method: 'POST',
@@ -283,7 +277,7 @@ export default function AddDialog({ open, onClose, setMessage, refreshTeachers }
         body: JSON.stringify(requestBody),
       });
       
-      console.log('Received response from server:', response);
+    
 
       if (response) {
         setMessage({

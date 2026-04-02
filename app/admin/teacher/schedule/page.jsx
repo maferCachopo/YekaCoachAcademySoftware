@@ -90,10 +90,17 @@ export default function TeacherSchedule() {
   );
 
   if (permanentStudent) {
+
+    const studentName = permanentStudent.fullName || 
+                        permanentStudent.name || 
+                        (permanentStudent.student ? `${permanentStudent.student.name} ${permanentStudent.student.surname}` : "Estudiante");
     return { 
       type: 'fixed', 
-      label: `Asignación Fija: ${permanentStudent.fullName}`, 
-      data: { name: permanentStudent.fullName }  
+      label: `Asignación Fija: ${studentName}`, 
+      data: { 
+        name: studentName,
+        packageName: permanentStudent.packageName || '' 
+      }   
     };
   }
 

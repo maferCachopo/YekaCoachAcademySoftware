@@ -19,7 +19,6 @@ async function fix() {
       const unique = Array.from(new Set(schedule.map(s => JSON.stringify(s)))).map(s => JSON.parse(s));
       
       await rel.update({ weeklySchedule: unique });
-      console.log(`Arreglado estudiante ID: ${rel.studentId}`);
     }
   }
   process.exit();
