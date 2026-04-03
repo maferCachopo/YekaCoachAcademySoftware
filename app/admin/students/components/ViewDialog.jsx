@@ -15,7 +15,8 @@ import {
   Refresh as RefreshIcon,
   Check as CheckIcon,
   Schedule as ScheduleIcon,
-  Public as PublicIcon
+  Public as PublicIcon,
+  Person as PersonIcon
 } from '@mui/icons-material';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
@@ -24,69 +25,71 @@ import { fetchWithAuth } from '../../../utils/api';
 import moment from 'moment';
 import 'moment-timezone';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPER: Convierte hora del admin (ADMIN_TIMEZONE) a la zona del estudiante
-// ─────────────────────────────────────────────────────────────────────────────
 const ADMIN_TIMEZONE = 'America/Caracas';
 
 const convertTimeToStudentTZ = (timeStr, studentTimezone) => {
   if (!timeStr || !studentTimezone) return timeStr;
   try {
-    // Usamos una fecha arbitraria (lunes) para hacer la conversión de hora
     const adminTime = moment.tz(`2024-01-01 ${timeStr}`, 'YYYY-MM-DD HH:mm', ADMIN_TIMEZONE);
     const studentTime = adminTime.clone().tz(studentTimezone);
-    return studentTime.format('h:mm A'); // Ej: "1:00 PM"
+    return studentTime.format('h:mm A');
   } catch {
     return timeStr;
   }
 };
 
-// Capitaliza la primera letra del día
 const capitalizeDay = (day) => {
   if (!day) return '';
   return day.charAt(0).toUpperCase() + day.slice(1);
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// COMPONENTE
-// ─────────────────────────────────────────────────────────────────────────────
 const ViewDialog = ({ open, onClose, student, setMessage }) => {
   const [loading, setLoading] = useState(false);
   const [updateStatusLoading, setUpdateStatusLoading] = useState(false);
   const [refreshedData, setRefreshedData] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
   const [weeklySchedule, setWeeklySchedule] = useState([]);
+  // ── NUEVO: estado para el profesor asignado ──
+  const [assignedTeacher, setAssignedTeacher] = useState(null);
   const effectRan = useRef(false);
 
   const themeContext = useTheme();
   const { theme } = themeContext || { theme: {} };
   const { translations } = useLanguage() || { translations: {} };
 
-  // ── Fetch teacher-student weekly schedule when dialog opens ──
+  // ── Fetch teacher + weekly schedule al abrir ──
   useEffect(() => {
     if (open && student?.id) {
       fetchWeeklySchedule(student.id);
+      fetchAssignedTeacher(student.id);
     }
     if (!open) {
       setWeeklySchedule([]);
+      setAssignedTeacher(null);
     }
   }, [open, student?.id]);
 
   const fetchWeeklySchedule = async (studentId) => {
     try {
       const data = await fetchWithAuth(`/students/${studentId}/weekly-schedule`);
-      if (data && data.weeklySchedule) {
-        setWeeklySchedule(data.weeklySchedule);
-      } else {
-        setWeeklySchedule([]);
-      }
+      setWeeklySchedule(data?.weeklySchedule || []);
     } catch {
-      // Silently fallback — deriveSchedule from classes will handle it
       setWeeklySchedule([]);
     }
   };
 
-  // ── Use effect to update status when dialog opens ──
+  // ── NUEVO: obtiene el profesor asignado al estudiante ──
+  const fetchAssignedTeacher = async (studentId) => {
+    try {
+      const res = await fetchWithAuth(`/students/${studentId}/teacher`);
+      if (!res?.teacherId) { setAssignedTeacher(null); return; }
+      const teacher = await fetchWithAuth(`/teachers/${res.teacherId}`);
+      setAssignedTeacher(teacher);
+    } catch {
+      setAssignedTeacher(null);
+    }
+  };
+
   useEffect(() => {
     if (open && student?.id && !effectRan.current) {
       effectRan.current = true;
@@ -107,34 +110,39 @@ const ViewDialog = ({ open, onClose, student, setMessage }) => {
   const currentClasses = displayStudent.classes || [];
   const allClasses = displayStudent.allClasses || [];
   const classesByPackage = displayStudent.classesByPackage || {};
-
   
+const derivedSchedule = (() => {
+  const seen = new Set();
+  const normalize = (slots) =>
+    slots
+      .map(slot => ({
+        day: slot.day,
+        startTime: slot.startTime || slot.start || '',
+        endTime: slot.endTime || slot.end || '',
+      }))
+      .filter(slot => {
+        if (!slot.day || !slot.startTime) return false;
+        const key = `${slot.day}-${slot.startTime}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
-  // ── Derive weekly schedule from scheduled classes if API fallback ──
-  const derivedSchedule = (() => {
-    if (weeklySchedule.length > 0) return weeklySchedule;
-    // Fallback: extract unique day+time slots from scheduled classes
-    const scheduled = allClasses.filter(c => c.status === 'scheduled');
-    const seen = new Set();
-    const slots = [];
-    for (const cls of scheduled) {
-      const day = cls.classDetail?.date
-        ? moment(cls.classDetail.date).format('dddd').toLowerCase()
-        : null;
-      const startTime = cls.classDetail?.startTime || null;
-      const endTime = cls.classDetail?.endTime || null;
-      if (day && startTime) {
-        const key = `${day}-${startTime}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          slots.push({ day, startTime, endTime });
-        }
-      }
-    }
-    return slots;
-  })();
+  // Prioridad 1: weeklySchedule de la API (fuente canónica)
+  if (weeklySchedule.length > 0) return normalize(weeklySchedule);
 
-  // ── Student timezone ──
+  // Fallback: derivar desde clases scheduled
+  const slots = allClasses
+    .filter(c => c.status === 'scheduled' && c.classDetail?.date && c.classDetail?.startTime)
+    .map(c => ({
+      day: moment(c.classDetail.date).format('dddd').toLowerCase(),
+      startTime: c.classDetail.startTime,
+      endTime: c.classDetail.endTime || '',
+    }));
+
+  return normalize(slots);
+})();
+
   const studentTimezone = displayStudent.user?.timezone || displayStudent.timezone || null;
 
   const handleUpdateStatus = async (studentId, showLoading = true) => {
@@ -144,11 +152,9 @@ const ViewDialog = ({ open, onClose, student, setMessage }) => {
       const response = await adminAPI.updateStudentClassStatus(studentId);
       if (response && response.updatedCount > 0) {
         setMessage({ open: true, text: `${response.updatedCount} class(es) updated successfully`, severity: 'success' });
-      } else {
-        setMessage({ open: true, text: 'No classes needed to be updated', severity: 'info' });
       }
 
-      if (student && student.id) {
+      if (student?.id) {
         try {
           const latestStudentData = await studentAPI.getStudentById(student.id);
           const allPackages = await studentAPI.getStudentPackages(student.id);
@@ -189,8 +195,8 @@ const ViewDialog = ({ open, onClose, student, setMessage }) => {
             classesByPackage
           });
 
-          // Re-fetch weekly schedule too
           fetchWeeklySchedule(student.id);
+          fetchAssignedTeacher(student.id);
         } catch (error) {
           console.error('Error refreshing student data:', error);
         }
@@ -211,7 +217,7 @@ const ViewDialog = ({ open, onClose, student, setMessage }) => {
         case 'attended': message = translations.noAttendedClasses || 'No attended classes found'; subMessage = translations.attendedClassesWillAppear || 'Attended classes will appear here'; break;
         case 'scheduled': message = translations.noClassesScheduled || 'No classes scheduled'; subMessage = translations.scheduledClassesWillAppear || 'When classes are scheduled, they will appear here'; break;
         case 'missed': message = translations.noMissedClasses || 'No missed classes'; subMessage = translations.missedClassesWillAppear || 'Missed classes will appear here'; break;
-        default: message = isPast ? (translations.noPastClasses || 'No past classes found') : (translations.noClassesScheduled || 'No classes scheduled'); subMessage = isPast ? '' : '';
+        default: message = isPast ? (translations.noPastClasses || 'No past classes found') : (translations.noClassesScheduled || 'No classes scheduled'); subMessage = '';
       }
       return (
         <Box sx={{ p: 4, textAlign: 'center', border: '1px dashed', borderColor: theme.mode === 'light' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.15)', borderRadius: 2, backgroundColor: theme.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)' }}>
@@ -262,95 +268,73 @@ const ViewDialog = ({ open, onClose, student, setMessage }) => {
     );
   };
 
-  // Sustituye la función renderPackageHistory dentro de ViewDialog.jsx por esta:
-
-const renderPackageHistory = () => {
-  if (!displayStudent.allPackages || displayStudent.allPackages.length === 0) {
+  const renderPackageHistory = () => {
+    if (!displayStudent.allPackages || displayStudent.allPackages.length === 0) {
+      return (
+        <Box sx={{ p: 4, textAlign: 'center', border: '1px dashed', borderColor: theme.mode === 'light' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.15)', borderRadius: 2, backgroundColor: theme.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)', mt: 2 }}>
+          <Typography variant="body1" sx={{ color: theme.text?.secondary, mb: 1 }}>{translations.noPackageHistory || 'No package history available'}</Typography>
+        </Box>
+      );
+    }
     return (
-      <Box sx={{ p: 4, textAlign: 'center', border: '1px dashed', borderColor: theme.mode === 'light' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.15)', borderRadius: 2, backgroundColor: theme.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)', mt: 2 }}>
-        <Typography variant="body1" sx={{ color: theme.text?.secondary, mb: 1 }}>{translations.noPackageHistory || 'No package history available'}</Typography>
+      <Box sx={{ mt: 2 }}>
+        <TableContainer component={Paper} variant="outlined" sx={{ boxShadow: 'none', border: theme.mode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+          <Table size="small">
+            <TableHead sx={{ backgroundColor: theme.mode === 'light' ? 'rgba(132,94,194,0.08)' : 'rgba(0,0,0,0.3)' }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.packageName || 'Package Name'}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.startDate || 'Start Date'}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.endDate || 'End Date'}</TableCell>
+                <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.status || 'Status'}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody sx={{ bgcolor: theme.mode === 'light' ? '#fff' : '#1e1e2d' }}>
+              {displayStudent.allPackages.map((pkg) => (
+                <TableRow key={pkg.id} sx={{ '&:hover': { backgroundColor: theme?.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)' } }}>
+                  <TableCell sx={{ color: theme.text?.primary }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <SchoolIcon sx={{ color: '#845EC2', fontSize: '1rem' }} />
+                      {pkg.package?.name || 'Unknown Package'}
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ color: theme.text?.primary }}>{pkg.startDate ? new Date(pkg.startDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
+                  <TableCell sx={{ color: theme.text?.primary }}>{pkg.endDate ? new Date(pkg.endDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <Chip
+                        size="small"
+                        label={pkg.status === 'cancelled' ? 'Cancelado por Upgrade' : (pkg.status || 'unknown')}
+                        sx={{
+                          fontWeight: 600,
+                          bgcolor: pkg.status === 'cancelled' ? 'rgba(255, 152, 0, 0.2)' : pkg.status === 'active' ? 'rgba(46,125,50,0.1)' : 'rgba(158,158,158,0.1)',
+                          color: pkg.status === 'cancelled' ? '#ef6c00' : pkg.status === 'active' ? '#2e7d32' : '#9e9e9e',
+                          border: pkg.status === 'cancelled' ? '1px solid #ef6c00' : 'none'
+                        }}
+                      />
+                      {pkg.status === 'cancelled' && pkg.notes && (
+                        <Typography variant="caption" sx={{ color: theme.text?.disabled, fontStyle: 'italic', ml: 1 }}>
+                          {pkg.notes}
+                        </Typography>
+                      )}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Box>
     );
-  }
-  return (
-    <Box sx={{ mt: 2 }}>
-      <TableContainer component={Paper} variant="outlined" sx={{ boxShadow: 'none', border: theme.mode === 'light' ? '1px solid rgba(0,0,0,0.08)' : '1px solid rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
-        <Table size="small">
-          <TableHead sx={{ backgroundColor: theme.mode === 'light' ? 'rgba(132,94,194,0.08)' : 'rgba(0,0,0,0.3)' }}>
-            <TableRow>
-              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.packageName || 'Package Name'}</TableCell>
-              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.startDate || 'Start Date'}</TableCell>
-              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.endDate || 'End Date'}</TableCell>
-              <TableCell sx={{ fontWeight: 600, color: theme.text?.primary }}>{translations.status || 'Status'}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody sx={{ bgcolor: theme.mode === 'light' ? '#fff' : '#1e1e2d' }}>
-            {displayStudent.allPackages.map((pkg) => (
-              <TableRow key={pkg.id} sx={{ '&:hover': { backgroundColor: theme?.mode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.03)' } }}>
-                <TableCell sx={{ color: theme.text?.primary }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <SchoolIcon sx={{ color: '#845EC2', fontSize: '1rem' }} />
-                    {pkg.package?.name || 'Unknown Package'}
-                  </Box>
-                </TableCell>
-                <TableCell sx={{ color: theme.text?.primary }}>{pkg.startDate ? new Date(pkg.startDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
-                <TableCell sx={{ color: theme.text?.primary }}>{pkg.endDate ? new Date(pkg.endDate).toISOString().split('T')[0] : 'N/A'}</TableCell>
-                <TableCell>
-                  {/* LÓGICA DE CHIP ACTUALIZADA */}
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    <Chip 
-                      size="small" 
-                      label={pkg.status === 'cancelled' ? 'Cancelado por Upgrade' : (pkg.status || 'unknown')} 
-                      sx={{ 
-                        fontWeight: 600, 
-                        bgcolor: pkg.status === 'cancelled' 
-                          ? 'rgba(255, 152, 0, 0.2)' // Naranja suave
-                          : pkg.status === 'active' ? 'rgba(46,125,50,0.1)' : 'rgba(158,158,158,0.1)',
-                        color: pkg.status === 'cancelled' ? '#ef6c00' : pkg.status === 'active' ? '#2e7d32' : '#9e9e9e',
-                        border: pkg.status === 'cancelled' ? '1px solid #ef6c00' : 'none'
-                      }} 
-                    />
-                    {pkg.status === 'cancelled' && pkg.notes && (
-                       <Typography variant="caption" sx={{ color: theme.text?.disabled, fontStyle: 'italic', ml: 1 }}>
-                         {pkg.notes}
-                       </Typography>
-                    )}
-                  </Box>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Box>
-  );
-};
+  };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CARD: Horario habitual con conversión de zona horaria
-  // ─────────────────────────────────────────────────────────────────────────
   const renderWeeklyScheduleCard = () => {
     if (derivedSchedule.length === 0) return null;
-
     const isSameTimezone = studentTimezone === ADMIN_TIMEZONE || !studentTimezone;
 
     return (
       <Grid item xs={12}>
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          p: 2,
-          borderRadius: 2,
-          bgcolor: theme.mode === 'light' ? 'rgba(132,94,194,0.06)' : 'rgba(132,94,194,0.15)',
-          border: `1px solid ${theme.mode === 'light' ? 'rgba(132,94,194,0.2)' : 'rgba(132,94,194,0.3)'}`,
-          gap: 2,
-        }}>
-          <Avatar sx={{
-            bgcolor: theme.mode === 'light' ? 'rgba(132,94,194,0.12)' : 'rgba(132,94,194,0.25)',
-            color: '#845EC2',
-            width: 36, height: 36,
-            flexShrink: 0
-          }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', p: 2, borderRadius: 2, bgcolor: theme.mode === 'light' ? 'rgba(132,94,194,0.06)' : 'rgba(132,94,194,0.15)', border: `1px solid ${theme.mode === 'light' ? 'rgba(132,94,194,0.2)' : 'rgba(132,94,194,0.3)'}`, gap: 2 }}>
+          <Avatar sx={{ bgcolor: theme.mode === 'light' ? 'rgba(132,94,194,0.12)' : 'rgba(132,94,194,0.25)', color: '#845EC2', width: 36, height: 36, flexShrink: 0 }}>
             <ScheduleIcon fontSize="small" />
           </Avatar>
           <Box sx={{ flex: 1 }}>
@@ -363,50 +347,23 @@ const renderPackageHistory = () => {
                 </Box>
               )}
             </Typography>
-
-            {/* Chips de días/horas */}
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {derivedSchedule.map((slot, idx) => {
                 const day = capitalizeDay(slot.day || slot.startTime);
                 const rawStart = slot.startTime || slot.start;
                 const rawEnd = slot.endTime || slot.end;
-
-                // Convertir a zona del estudiante
                 const displayStart = studentTimezone && !isSameTimezone
                   ? convertTimeToStudentTZ(rawStart, studentTimezone)
-                  : rawStart
-                    ? moment(`2024-01-01 ${rawStart}`, 'YYYY-MM-DD HH:mm').format('h:mm A')
-                    : null;
-
+                  : rawStart ? moment(`2024-01-01 ${rawStart}`, 'YYYY-MM-DD HH:mm').format('h:mm A') : null;
                 const displayEnd = studentTimezone && !isSameTimezone
                   ? convertTimeToStudentTZ(rawEnd, studentTimezone)
-                  : rawEnd
-                    ? moment(`2024-01-01 ${rawEnd}`, 'YYYY-MM-DD HH:mm').format('h:mm A')
-                    : null;
-
-                const label = displayStart
-                  ? `${day} ${displayStart}${displayEnd ? ` – ${displayEnd}` : ''}`
-                  : day;
-
+                  : rawEnd ? moment(`2024-01-01 ${rawEnd}`, 'YYYY-MM-DD HH:mm').format('h:mm A') : null;
+                const label = displayStart ? `${day} ${displayStart}${displayEnd ? ` – ${displayEnd}` : ''}` : day;
                 return (
-                  <Chip
-                    key={idx}
-                    label={label}
-                    size="small"
-                    sx={{
-                      fontWeight: 600,
-                      bgcolor: theme.mode === 'light' ? 'rgba(132,94,194,0.12)' : 'rgba(132,94,194,0.25)',
-                      color: theme.mode === 'light' ? '#5D3E9E' : '#C9B8E8',
-                      border: `1px solid ${theme.mode === 'light' ? 'rgba(132,94,194,0.3)' : 'rgba(132,94,194,0.4)'}`,
-                      fontSize: '0.8rem',
-                      height: 28,
-                    }}
-                  />
+                  <Chip key={idx} label={label} size="small" sx={{ fontWeight: 600, bgcolor: theme.mode === 'light' ? 'rgba(132,94,194,0.12)' : 'rgba(132,94,194,0.25)', color: theme.mode === 'light' ? '#5D3E9E' : '#C9B8E8', border: `1px solid ${theme.mode === 'light' ? 'rgba(132,94,194,0.3)' : 'rgba(132,94,194,0.4)'}`, fontSize: '0.8rem', height: 28 }} />
                 );
               })}
             </Box>
-
-            {/* Nota de diferencia de zona horaria */}
             {studentTimezone && !isSameTimezone && (
               <Typography variant="caption" sx={{ color: theme.text?.disabled, display: 'block', mt: 0.75, fontSize: '0.72rem' }}>
                 ⏱ Hora del profesor ({ADMIN_TIMEZONE}):&nbsp;
@@ -424,6 +381,31 @@ const renderPackageHistory = () => {
       </Grid>
     );
   };
+
+  // ── NUEVO: card del profesor asignado ──
+  const renderAssignedTeacherCard = () => (
+    <Grid item xs={12} md={6}>
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Avatar sx={{ bgcolor: theme.mode === 'light' ? 'rgba(214,93,177,0.1)' : 'rgba(214,93,177,0.2)', color: '#D65DB1', width: 36, height: 36, mr: 2, flexShrink: 0 }}>
+          <PersonIcon fontSize="small" />
+        </Avatar>
+        <Box>
+          <Typography variant="caption" sx={{ color: theme.text?.secondary, display: 'block' }}>
+            {translations.assignedTeacher || 'Profesor asignado'}
+          </Typography>
+          {assignedTeacher ? (
+            <Typography variant="body1" sx={{ fontWeight: 500, color: theme.text?.primary }}>
+              {assignedTeacher.firstName} {assignedTeacher.lastName}
+            </Typography>
+          ) : (
+            <Typography variant="body1" sx={{ fontWeight: 500, color: theme.text?.secondary, fontStyle: 'italic' }}>
+              {translations.noTeacher || 'Sin profesor asignado'}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    </Grid>
+  );
 
   return (
     <Dialog
@@ -466,7 +448,7 @@ const renderPackageHistory = () => {
           </Box>
         ) : (
           <>
-            {/* ── INFO CARD SECTION ── */}
+            {/* ── INFO CARDS ── */}
             <Box sx={{ p: 3, background: theme.mode === 'light' ? 'rgba(132,94,194,0.05)' : 'rgba(132,94,194,0.1)', borderRadius: 3, mb: 3 }}>
               <Grid container spacing={3}>
 
@@ -497,14 +479,15 @@ const renderPackageHistory = () => {
                         {(() => {
                           const activePkg = displayStudent.packages?.find(p => p.status === 'active');
                           if (!activePkg) return '0';
-                          const count = allClasses.filter(c => c.status === 'scheduled' && c.studentPackageId === activePkg.id).length;
-              
-                          return count.toString();
+                          return allClasses.filter(c => c.status === 'scheduled' && c.studentPackageId === activePkg.id).length.toString();
                         })()}
                       </Typography>
                     </Box>
                   </Box>
                 </Grid>
+
+                {/* ── NUEVO: Profesor asignado ── */}
+                {renderAssignedTeacherCard()}
 
                 {/* Email */}
                 <Grid item xs={12} md={6}>
@@ -556,13 +539,15 @@ const renderPackageHistory = () => {
                     <Box>
                       <Typography variant="caption" sx={{ color: theme.text?.secondary, display: 'block' }}>{translations.location || 'Location'}</Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500, color: theme.text?.primary }}>
-                        {displayStudent.city && displayStudent.country ? `${displayStudent.city}, ${displayStudent.country}` : displayStudent.city || displayStudent.country || 'N/A'}
+                        {displayStudent.city && displayStudent.country
+                          ? `${displayStudent.city}, ${displayStudent.country}`
+                          : displayStudent.city || displayStudent.country || 'N/A'}
                       </Typography>
                     </Box>
                   </Box>
                 </Grid>
 
-                {/* ── NUEVO: Horario habitual con zona horaria del estudiante ── */}
+                {/* Horario habitual */}
                 {renderWeeklyScheduleCard()}
 
               </Grid>
@@ -580,7 +565,6 @@ const renderPackageHistory = () => {
                 <Tab label={translations.packageHistory || 'Package History'} id="tab-2" aria-controls="tabpanel-2" />
               </Tabs>
 
-              {/* Class Schedule Tab */}
               <Box role="tabpanel" hidden={activeTab !== 0} id="tabpanel-0" aria-labelledby="tab-0" sx={{ pt: 1 }}>
                 {activeTab === 0 && (
                   <>
@@ -593,7 +577,6 @@ const renderPackageHistory = () => {
                 )}
               </Box>
 
-              {/* Attended Classes Tab */}
               <Box role="tabpanel" hidden={activeTab !== 1} id="tabpanel-1" aria-labelledby="tab-1" sx={{ pt: 1 }}>
                 {activeTab === 1 && (
                   <>
@@ -602,7 +585,6 @@ const renderPackageHistory = () => {
                       {translations.attendedClasses || 'Attended Classes'}
                     </Typography>
                     {renderClassTable(allClasses.filter(c => c.status === 'attended'), false, 'attended')}
-
                     {pastPackages.length > 0 && Object.keys(classesByPackage).map((packageId) => {
                       const packageInfo = displayStudent.allPackages?.find(p => p.id.toString() === packageId);
                       const packageClasses = classesByPackage[packageId]?.filter(c => c.status === 'attended') || [];
@@ -621,7 +603,6 @@ const renderPackageHistory = () => {
                 )}
               </Box>
 
-              {/* Package History Tab */}
               <Box role="tabpanel" hidden={activeTab !== 2} id="tabpanel-2" aria-labelledby="tab-2">
                 {activeTab === 2 && (
                   <>
