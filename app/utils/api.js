@@ -271,62 +271,72 @@ export const fetchWithAuth = async (url, options = {}) => {
       }
     }
     
-    // Handle non-JSON responses (like 404 or server errors)
+    // ─────────────────────────────────────────────────────────────────────
+    // FIX: el try/catch original envolvía tanto el JSON.parse COMO los
+    // throw de casos especiales, así que cuando lanzabas dentro del try,
+    // el catch(e) lo atrapaba y lo descartaba → el error salía como {}.
+    // Solución: parsear en su propio bloque aislado y poner los casos
+    // especiales FUERA, donde sus throw viajan directo al catch externo.
+    // ─────────────────────────────────────────────────────────────────────
     if (!response.ok) {
       const errorText = await response.text();
       let errorMessage;
       let errorData = {};
-      
+
+      // 1. Parsear JSON — bloque aislado, solo captura errores de parseo
       try {
-        // Try to parse as JSON
         errorData = JSON.parse(errorText);
         errorMessage = errorData.message || errorData.error || `Error ${response.status}: ${response.statusText}`;
-        
-        // Special handling for 403 responses that might indicate inactive account
-        if (response.status === 403 && (
-          errorData.error === 'account_inactive' || 
-          errorMessage.includes('account has been deactivated')
-        )) {
-          console.warn('Account inactive detected:', errorMessage);
-          const error = new Error(errorMessage);
-          error.status = response.status;
-          error.response = response;
-          error.data = errorData;
-          error.error = errorData.error || 'account_inactive';
-          throw error;
-        }
-        
-        // Special handling for wrong portal error
-        if (response.status === 401 && errorData.code === 'WRONG_PORTAL') {
-          console.warn('Wrong portal access detected:', errorMessage);
-          const error = new Error(errorMessage);
-          error.status = response.status;
-          error.response = response;
-          error.data = errorData;
-          throw error;
-        }
-        
-        // Special handling for student assignment errors
-        if (response.status === 400 && errorData.error === 'Student is already assigned to another teacher') {
-          console.warn('Student already assigned error:', errorData);
-          const error = new Error(errorMessage);
-          error.status = response.status;
-          error.response = response;
-          error.data = errorData;
-          throw error;
-        }
       } catch (e) {
-        // If not JSON, use text directly
+        // Respuesta no era JSON (HTML de error, texto plano, etc.)
         errorMessage = errorText || `Server error: ${response.status} ${response.statusText}`;
       }
-      
+
+      // 2. Casos especiales FUERA del try/catch de parseo
+      //    Sus throw ahora llegan correctamente al catch externo de fetchWithAuth
+
+      // 403 — cuenta inactiva
+      if (response.status === 403 && (
+        errorData.error === 'account_inactive' ||
+        errorMessage.includes('account has been deactivated')
+      )) {
+        console.warn('Account inactive detected:', errorMessage);
+        const error = new Error(errorMessage);
+        error.status = response.status;
+        error.response = response;
+        error.data = errorData;
+        error.error = errorData.error || 'account_inactive';
+        throw error;
+      }
+
+      // 401 — portal incorrecto
+      if (response.status === 401 && errorData.code === 'WRONG_PORTAL') {
+        console.warn('Wrong portal access detected:', errorMessage);
+        const error = new Error(errorMessage);
+        error.status = response.status;
+        error.response = response;
+        error.data = errorData;
+        throw error;
+      }
+
+      // 400 — estudiante ya asignado a otro profesor
+      if (response.status === 400 && errorData.error === 'Student is already assigned to another teacher') {
+        console.warn('Student already assigned error:', errorData);
+        const error = new Error(errorMessage);
+        error.status = response.status;
+        error.response = response;
+        error.data = errorData;
+        throw error;
+      }
+
+      // 3. Error genérico para cualquier otro caso no-ok
       console.error(`API error for ${url}:`, {
         status: response.status,
         statusText: response.statusText,
         message: errorMessage,
         data: errorData
       });
-      
+
       const error = new Error(errorMessage);
       error.status = response.status;
       error.response = response;
@@ -524,7 +534,7 @@ export const studentAPI = {
     }
   },
 
-    upgradePackage: async (studentId, data) => {
+  upgradePackage: async (studentId, data) => {
     return fetchWithAuth(`/students/${studentId}/upgrade-package`, {
       method: 'POST',
       body: JSON.stringify(data)
@@ -1364,7 +1374,7 @@ export const teacherAPI = {
     }
   },
   
-    // Get teacher's schedule
+  // Get teacher's schedule
   getSchedule: async (id, { startDate, endDate }) => {
     try {
       // Get basic schedule data (work hours, break hours)
@@ -1601,4 +1611,4 @@ export const teacherAPI = {
       throw error;
     }
   },
-}; 
+};

@@ -14,7 +14,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
     const showInactive = req.query.showInactive === 'true';
     const whereClause = !showInactive ? { active: true } : {};
-    
+
     const students = await Student.findAll({
       where: whereClause,
       include: [
@@ -46,10 +46,10 @@ router.get('/:id', verifyToken, isSelfOrAdmin, async (req, res) => {
     const student = await Student.findByPk(id, {
       include: [
         { model: User, as: 'user', attributes: ['username', 'email', 'timezone'] },
-        { 
-          model: StudentPackage, 
-          as: 'packages', 
-          include: [{ model: Package, as: 'package' }] 
+        {
+          model: StudentPackage,
+          as: 'packages',
+          include: [{ model: Package, as: 'package' }]
         }
       ]
     });
@@ -60,16 +60,13 @@ router.get('/:id', verifyToken, isSelfOrAdmin, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UPDATE STUDENT — corregido: timezone va en User, no en Student
-// ─────────────────────────────────────────────────────────────────────────────
+// Update student
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const student = await Student.findByPk(id);
     if (!student) return res.status(404).json({ message: 'Student not found' });
 
-    // Campos que pertenecen a la tabla Student
     const studentFields = [
       'name', 'surname', 'birthDate', 'phone',
       'city', 'country', 'active', 'zoomLink', 'allowDifferentTeacher'
@@ -84,13 +81,13 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
 
     await student.update(studentUpdateData);
 
-    // Campos que pertenecen a la tabla User (incluido timezone)
+    // Campos que pertenecen a User (email, username, timezone, password)
     if (req.body.updateUser) {
       const user = await User.findByPk(student.userId);
       if (user) {
         if (req.body.email)    user.email    = req.body.email;
         if (req.body.username) user.username = req.body.username;
-        if (req.body.timezone) user.timezone = req.body.timezone; // <-- aquí va timezone
+        if (req.body.timezone) user.timezone = req.body.timezone;
         if (req.body.password) {
           const salt = await bcrypt.genSalt(10);
           user.password = await bcrypt.hash(req.body.password, salt);
@@ -106,11 +103,7 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NUEVA RUTA: PUT /:id/packages/:packageId
-// Permite actualizar el status u otros campos de un StudentPackage específico.
-// Esto era lo que causaba el 500 — la ruta no existía.
-// ─────────────────────────────────────────────────────────────────────────────
+// Update a specific StudentPackage
 router.put('/:id/packages/:packageId', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id, packageId } = req.params;
@@ -123,7 +116,6 @@ router.put('/:id/packages/:packageId', verifyToken, isAdmin, async (req, res) =>
       return res.status(404).json({ message: 'StudentPackage not found' });
     }
 
-    // Campos permitidos para actualizar
     const allowedFields = ['status', 'remainingClasses', 'usedReschedules', 'paymentStatus', 'endDate'];
     const updateData = {};
     for (const field of allowedFields) {
@@ -140,9 +132,7 @@ router.put('/:id/packages/:packageId', verifyToken, isAdmin, async (req, res) =>
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RUTA CRÍTICA: Asignar paquete a estudiante
-// ─────────────────────────────────────────────────────────────────────────────
+// Assign package to student
 router.post('/:id/packages', verifyToken, isAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -177,7 +167,7 @@ router.post('/:id/packages', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Obtener paquetes de un estudiante específico
+// Get packages for a student
 router.get('/:id/packages', verifyToken, isSelfOrAdmin, async (req, res) => {
   try {
     const studentPackages = await StudentPackage.findAll({
@@ -192,6 +182,7 @@ router.get('/:id/packages', verifyToken, isSelfOrAdmin, async (req, res) => {
   }
 });
 
+// Upgrade package
 router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -199,17 +190,28 @@ router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
     const { newPackageId, teacherId, classes, weeklySchedule, startDate } = req.body;
 
     const student = await Student.findByPk(id, { transaction: t });
+    if (!student) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
     const currentActivePackage = await StudentPackage.findOne({
       where: { studentId: id, status: 'active' },
       transaction: t
     });
 
-    if (!currentActivePackage) throw new Error('No se encontró paquete activo.');
+    if (!currentActivePackage) {
+      await t.rollback();
+      return res.status(404).json({ message: 'No se encontró paquete activo.' });
+    }
 
-    // 1. Cancelar el viejo
-    await currentActivePackage.update({ status: 'cancelled', notes: 'Cancelado por upgrade' }, { transaction: t });
+    // 1. Cancelar el paquete anterior
+    await currentActivePackage.update(
+      { status: 'cancelled', notes: 'Cancelado por upgrade' },
+      { transaction: t }
+    );
 
-    // 2. Limpiar clases programadas futuras del viejo paquete
+    // 2. Limpiar clases programadas futuras del paquete anterior
     const oldScheduled = await StudentClass.findAll({
       where: { studentId: id, studentPackageId: currentActivePackage.id, status: 'scheduled' },
       transaction: t
@@ -217,7 +219,10 @@ router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
 
     if (oldScheduled.length > 0) {
       const oldClassIds = oldScheduled.map(sc => sc.classId);
-      await StudentClass.destroy({ where: { id: oldScheduled.map(sc => sc.id) }, transaction: t });
+      await StudentClass.destroy({
+        where: { id: oldScheduled.map(sc => sc.id) },
+        transaction: t
+      });
       for (const cId of oldClassIds) {
         const others = await StudentClass.findOne({ where: { classId: cId }, transaction: t });
         if (!others) await Class.destroy({ where: { id: cId }, transaction: t });
@@ -226,6 +231,11 @@ router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
 
     // 3. Crear nuevo paquete
     const newPkgBase = await Package.findByPk(newPackageId, { transaction: t });
+    if (!newPkgBase) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Package not found' });
+    }
+
     const newStudentPackage = await StudentPackage.create({
       studentId: id,
       packageId: newPackageId,
@@ -236,12 +246,12 @@ router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
       paymentStatus: 'paid'
     }, { transaction: t });
 
-    // 4. Crear clases con el NOMBRE DEL ESTUDIANTE en el Title
+    // 4. Crear clases con el nombre del estudiante como título
     const studentFullName = `${student.name} ${student.surname}`;
 
     for (const cls of classes) {
       const classRecord = await Class.create({
-        title: studentFullName, // <--- CAMBIO CLAVE PARA EL CRONOGRAMA
+        title: studentFullName,
         date: cls.date,
         startTime: cls.startTime,
         endTime: cls.endTime,
@@ -260,8 +270,8 @@ router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
       }, { transaction: t });
     }
 
-    // 5. Actualizar weeklySchedule
-    if (weeklySchedule) {
+    // 5. Actualizar weeklySchedule en TeacherStudent
+    if (weeklySchedule && teacherId) {
       const [tsRelation] = await TeacherStudent.findOrCreate({
         where: { teacherId, studentId: id },
         defaults: { active: true },
@@ -271,19 +281,28 @@ router.post('/:id/upgrade-package', verifyToken, isAdmin, async (req, res) => {
     }
 
     await t.commit();
-    res.json({ message: 'Upgrade exitoso', package: newStudentPackage });
+    return res.json({ message: 'Upgrade exitoso', package: newStudentPackage });
   } catch (error) {
     await t.rollback();
-    res.status(500).json({ message: error.message });
+    console.error('Upgrade package error:', error);
+    return res.status(500).json({ message: error.message });
   }
 });
 
-// Programación semanal recurrente
+// Schedule classes for a student
 router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
     const { packageId, classes, teacherId, weeklySchedule: clientWeeklySchedule } = req.body;
+
+    // FIX: obtener el estudiante para usar su nombre como título de las clases
+    const student = await Student.findByPk(id);
+    if (!student) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Student not found' });
+    }
+    const studentFullName = `${student.name} ${student.surname}`;
 
     const studentPackage = await StudentPackage.findOne({
       where: { studentId: id, packageId, status: 'active' }
@@ -318,6 +337,7 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
 
     await StudentClass.bulkCreate(scheduledClasses, { transaction: t });
 
+    // Construir weeklySchedule desde las clases si el cliente no lo envió
     const weeklyScheduleToSave = (clientWeeklySchedule && clientWeeklySchedule.length > 0)
       ? clientWeeklySchedule
       : classes
@@ -354,13 +374,14 @@ router.post('/:id/schedule', verifyToken, isAdmin, async (req, res) => {
       }
     }
 
-    await studentPackage.update({
-      remainingClasses: scheduledClasses.length
-    }, { transaction: t });
+    await studentPackage.update(
+      { remainingClasses: scheduledClasses.length },
+      { transaction: t }
+    );
 
     await t.commit();
-    return res.status(201).json({ 
-      message: 'Schedule created and fixed hours saved', 
+    return res.status(201).json({
+      message: 'Schedule created successfully',
       count: scheduledClasses.length,
       weeklySchedule: weeklyScheduleToSave
     });
@@ -378,7 +399,7 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
     const { id } = req.params;
     const student = await Student.findByPk(id);
     if (!student) return res.status(404).json({ message: 'Student not found' });
-    
+
     await student.update({ active: false });
     return res.json({ message: 'Student deactivated' });
   } catch (error) {
@@ -386,7 +407,7 @@ router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// Obtener profesor activo de un estudiante
+// Get active teacher for a student
 router.get('/:id/teacher', verifyToken, isSelfOrAdmin, async (req, res) => {
   try {
     const relation = await TeacherStudent.findOne({
@@ -400,7 +421,7 @@ router.get('/:id/teacher', verifyToken, isSelfOrAdmin, async (req, res) => {
   }
 });
 
-// Get weekly schedule for a student (from TeacherStudent relation)
+// Get weekly schedule for a student
 router.get('/:id/weekly-schedule', verifyToken, isSelfOrAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -418,16 +439,12 @@ router.get('/:id/weekly-schedule', verifyToken, isSelfOrAdmin, async (req, res) 
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE todas las clases SCHEDULED de un paquete activo del estudiante
-// Se llama desde EditDialog antes de crear las nuevas cuando cambia el horario
-// ─────────────────────────────────────────────────────────────────────────────
+// Delete all scheduled classes for a specific package (used before rescheduling)
 router.delete('/:id/packages/:packageId/scheduled-classes', verifyToken, isAdmin, async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id, packageId } = req.params;
 
-    // Encontrar el StudentPackage activo
     const studentPackage = await StudentPackage.findOne({
       where: { studentId: id, id: packageId }
     });
@@ -436,7 +453,6 @@ router.delete('/:id/packages/:packageId/scheduled-classes', verifyToken, isAdmin
       return res.status(404).json({ message: 'StudentPackage not found' });
     }
 
-    // Obtener todas las StudentClasses scheduled de este paquete
     const scheduledStudentClasses = await StudentClass.findAll({
       where: {
         studentId: id,
@@ -453,7 +469,6 @@ router.delete('/:id/packages/:packageId/scheduled-classes', verifyToken, isAdmin
 
     const classIds = scheduledStudentClasses.map(sc => sc.classId);
 
-    // Borrar StudentClasses
     await StudentClass.destroy({
       where: {
         studentId: id,
@@ -463,7 +478,7 @@ router.delete('/:id/packages/:packageId/scheduled-classes', verifyToken, isAdmin
       transaction: t
     });
 
-    // Borrar las Classes huérfanas (solo si no las usa otro estudiante)
+    // Borrar clases huérfanas (no usadas por otro estudiante)
     for (const classId of classIds) {
       const otherStudentClass = await StudentClass.findOne({
         where: { classId },
@@ -475,8 +490,10 @@ router.delete('/:id/packages/:packageId/scheduled-classes', verifyToken, isAdmin
     }
 
     await t.commit();
-    console.log(`[Schedule Reset] Deleted ${scheduledStudentClasses.length} scheduled classes for student ${id}, package ${packageId}`);
-    return res.json({ message: 'Scheduled classes deleted', deleted: scheduledStudentClasses.length });
+    return res.json({
+      message: 'Scheduled classes deleted',
+      deleted: scheduledStudentClasses.length
+    });
   } catch (error) {
     if (t) await t.rollback();
     console.error('Delete scheduled classes error:', error);

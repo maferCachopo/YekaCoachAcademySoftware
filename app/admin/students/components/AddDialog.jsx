@@ -13,7 +13,7 @@ import {
   CalendarMonth as CalendarIcon, 
   AutoFixHigh as GenerateIcon, 
   Public as GlobeIcon 
-} from '@mui/icons-material'; // <--- IMPORTACIÓN CORREGIDA AQUÍ
+} from '@mui/icons-material';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useLanguage } from '../../../contexts/LanguageContext';
 import { authAPI, studentAPI, packageAPI, adminAPI } from '../../../utils/api';
@@ -30,12 +30,6 @@ import { getAllCountries, getTimezonesForCountry } from 'countries-and-timezones
 // UTILIDADES DE GENERACIÓN DE FECHAS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Dado un startDate y un slot { day: 'monday', start: '10:00' },
- * devuelve la primera fecha en que ese slot puede ocurrir:
- *   - La fecha debe ser >= startDate
- *   - Si coincide con startDate pero la hora ya pasó → salta a la semana siguiente
- */
 const getFirstOccurrence = (startDate, slot) => {
   const DAY_MAP = {
     sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
@@ -45,18 +39,13 @@ const getFirstOccurrence = (startDate, slot) => {
   const now = moment().tz(ADMIN_TIMEZONE);
   const targetDay = DAY_MAP[slot.day.toLowerCase()];
   const [slotHour, slotMin] = slot.start.split(':').map(Number);
-   
 
-
-  // Empezar desde el inicio de startDate
   let candidate = moment(startDate).tz(ADMIN_TIMEZONE).startOf('day');
 
-  // Avanzar hasta el día de la semana que corresponde al slot
   while (candidate.day() !== targetDay) {
     candidate.add(1, 'day');
   }
 
-  // Si ese candidato + hora del slot ya pasó respecto a "ahora" → siguiente semana
   const candidateWithTime = candidate.clone().hour(slotHour).minute(slotMin).second(0);
   if (candidateWithTime.isSameOrBefore(now)) {
     candidate.add(7, 'days');
@@ -65,10 +54,6 @@ const getFirstOccurrence = (startDate, slot) => {
   return candidate.format('YYYY-MM-DD');
 };
 
-/**
- * Genera todas las fechas de UN bloque (una por semana durante S semanas).
- * firstDate ya es la primera fecha válida calculada por getFirstOccurrence.
- */
 const generateBlockDates = (firstDate, slot, numWeeks) => {
   const dates = [];
   let current = moment(firstDate);
@@ -84,27 +69,10 @@ const generateBlockDates = (firstDate, slot, numWeeks) => {
   return dates;
 };
 
-/**
- * Función principal:
- * Dado el startDate y todos los slots seleccionados (uno por fase),
- * genera el array final de clases con classNumber correcto.
- *
- * Lógica:
- * 1. Calcular la primera ocurrencia de cada slot desde startDate
- * 2. Ordenar slots por primera ocurrencia (el más cercano = Bloque 1)
- * 3. Generar S fechas por bloque (una por semana)
- * 4. Intercalar: clase 1 del bloque más cercano, clase 1 del 2º, clase 1 del 3º,
- *                clase 2 del bloque más cercano, etc.
- *
- * Ejemplo 12 clases, startDate martes 13 mayo, slots: lun, mié, vie
- *   → Orden por cercanía: mié(14), vie(16), lun(19)
- *   → Clase 1=mié14, 2=vie16, 3=lun19, 4=mié21, 5=vie23, 6=lun26 ...
- */
 const generateAllClasses = (startDate, slotsPerPhase, totalClasses, durationWeeks, teacherId) => {
-  const S = durationWeeks; // semanas de duración (= clases por bloque)
-  const B = slotsPerPhase.length; // número de bloques/fases
+  const S = durationWeeks;
+  const B = slotsPerPhase.length;
 
-  // Paso 1 y 2: calcular primera ocurrencia y ordenar por cercanía
   const slotsWithFirstDate = slotsPerPhase
     .map(slot => ({
       ...slot,
@@ -112,20 +80,18 @@ const generateAllClasses = (startDate, slotsPerPhase, totalClasses, durationWeek
     }))
     .sort((a, b) => moment(a.firstDate).diff(moment(b.firstDate)));
 
-  // Paso 3: generar las fechas de cada bloque ordenado
   const blockDates = slotsWithFirstDate.map(slot =>
     generateBlockDates(slot.firstDate, slot, S)
   );
 
-  // Paso 4: intercalar y asignar classNumber
   const allClasses = [];
   for (let week = 0; week < S; week++) {
     for (let block = 0; block < B; block++) {
-      const classNumber = week * B + block + 1; // 1-based
+      const classNumber = week * B + block + 1;
       if (classNumber > totalClasses) break;
       allClasses.push({
         id: `temp-${block}-${week}`,
-        phase: block + 1,          // 1-based, según orden de cercanía
+        phase: block + 1,
         classNumber,
         ...blockDates[block][week],
         teacherId: teacherId || undefined,
@@ -167,17 +133,14 @@ const AddDialog = ({
   const [weeklyScheduleSlots, setWeeklyScheduleSlots] = useState([]);
   const [timezone, setTimezone] = useState('America/Caracas');
   const [availableTimezones, setAvailableTimezones] = useState(moment.tz.names());
-  const [searchOptions, setSearchOptions] = useState([]); // Opciones del desplegable
-  const [isFetching, setIsFetching] = useState(false); // Estado de carga
+  const [searchOptions, setSearchOptions] = useState([]);
+  const [isFetching, setIsFetching] = useState(false);
   const regexEmail = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
 
-  // Estados para el algoritmo de fases
   const [currentPhase, setCurrentPhase] = useState(1);
   const [totalPhases, setTotalPhases] = useState(1);
 
-  // ── NUEVO: fecha de inicio del paquete y slots seleccionados por fase ──
   const [packageStartDate, setPackageStartDate] = useState(null);
-  // slotsPerPhase: { [phaseNumber]: { day, start, end } }
   const [slotsPerPhase, setSlotsPerPhase] = useState({});
 
   const prevPackageIdRef = useRef(null);
@@ -205,7 +168,6 @@ const AddDialog = ({
     }
   }, [open]);
 
-
   // 1. Cuando cambia el país, filtrar zonas horarias
   useEffect(() => {
     if (formData.country) {
@@ -219,8 +181,6 @@ const AddDialog = ({
         if (zones && zones.length > 0) {
           const zoneNames = zones.map(z => z.name);
           setAvailableTimezones(zoneNames);
-
-          // Si el país solo tiene una zona, se asigna automáticamente
           if (zoneNames.length === 1) {
             setTimezone(zoneNames[0]);
           }
@@ -233,7 +193,7 @@ const AddDialog = ({
     }
   }, [formData.country]);
 
-  // 2. Cuando cambia la ciudad, intentar predecir la zona dentro de las disponibles
+  // 2. Cuando cambia la ciudad, intentar predecir la zona
   useEffect(() => {
     if (formData.city && formData.city.length > 3) {
       const normalizedCity = formData.city.toLowerCase().replace(/\s+/g, '_');
@@ -246,9 +206,9 @@ const AddDialog = ({
     }
   }, [formData.city, availableTimezones]);
 
-    const handleScheduleChange = useCallback((slots) => {
+  const handleScheduleChange = useCallback((slots) => {
     setWeeklyScheduleSlots(slots);
-     }, []);
+  }, []);
 
   // ─── Cuando cambia el paquete: recalcular fases ───
   useEffect(() => {
@@ -295,45 +255,34 @@ const AddDialog = ({
   };
 
   const handleTimezoneSearch = async (query) => {
-  if (query.length < 3) return; // Buscar solo si hay más de 3 letras
+    if (query.length < 3) return;
+    setIsFetching(true);
+    try {
+      const res = await fetch(`https://api.teleport.org/api/cities/?search=${query}`);
+      const data = await res.json();
+      const results = data._embedded['city:search-results'].map(item => ({
+        label: item.matching_full_name,
+        detailsUrl: item._links['city:item'].href
+      }));
+      setSearchOptions(results);
+    } catch (error) {
+      console.error("Error buscando ciudades:", error);
+    } finally {
+      setIsFetching(false);
+    }
+  };
 
-  setIsFetching(true);
-  try {
-    // 1. Buscamos ciudades por el nombre ingresado
-    const res = await fetch(`https://api.teleport.org/api/cities/?search=${query}`);
-    const data = await res.json();
-    
-    // 2. Formateamos los resultados para el Autocomplete
-    const results = data._embedded['city:search-results'].map(item => ({
-      label: item.matching_full_name, // Ej: "Miami, Florida, United States"
-      detailsUrl: item._links['city:item'].href // Link para obtener el timezone
-    }));
-
-    setSearchOptions(results);
-  } catch (error) {
-    console.error("Error buscando ciudades:", error);
-  } finally {
-    setIsFetching(false);
-  }
-};
-
-// Función para obtener el timezone real cuando el usuario selecciona una ciudad
-const handleSelectCity = async (cityItem) => {
-  if (!cityItem) return;
-
-  try {
-    const res = await fetch(cityItem.detailsUrl);
-    const data = await res.json();
-    
-    // Extraemos la zona horaria oficial (IANA)
-    const ianaTimezone = data._links['city:timezone'].name; // Ej: "America/New_York"
-    setTimezone(ianaTimezone);
-  } catch (error) {
-    console.error("Error obteniendo zona horaria:", error);
-  }
-};
-
-
+  const handleSelectCity = async (cityItem) => {
+    if (!cityItem) return;
+    try {
+      const res = await fetch(cityItem.detailsUrl);
+      const data = await res.json();
+      const ianaTimezone = data._links['city:timezone'].name;
+      setTimezone(ianaTimezone);
+    } catch (error) {
+      console.error("Error obteniendo zona horaria:", error);
+    }
+  };
 
   const handleTeacherChange = (e) => {
     const teacherId = e.target.value;
@@ -341,14 +290,9 @@ const handleSelectCity = async (cityItem) => {
     fetchTeacherSchedule(teacherId);
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PASO 1: El admin hace clic en el calendario → guarda el slot de esta fase
-  // NO genera fechas todavía, solo registra qué slot fue seleccionado.
-  // ─────────────────────────────────────────────────────────────────────────
   const handleSlotSelect = (slot) => {
     if (!formData.package) return;
 
-    // Guardar el slot para la fase actual (lo usaremos al generar)
     setSlotsPerPhase(prev => ({
       ...prev,
       [currentPhase]: {
@@ -359,8 +303,6 @@ const handleSelectCity = async (cityItem) => {
       }
     }));
 
-    // Preview inmediato usando la fecha actual como referencia temporal
-    // (se recalculará correctamente al pulsar "Generar fechas")
     const selectedPkg = packages.find(pkg => pkg.id === formData.package);
     const T = selectedPkg.totalClasses;
     const S = selectedPkg.durationWeeks || 4;
@@ -385,7 +327,7 @@ const handleSelectCity = async (cityItem) => {
           startTime: slot.start,
           endTime: slot.end,
           teacherId: selectedTeacher,
-          isPreview: true, // marcamos que son fechas provisionales
+          isPreview: true,
         });
       }
     }
@@ -396,10 +338,6 @@ const handleSelectCity = async (cityItem) => {
     });
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PASO 2: El admin escribe startDate y pulsa "Generar fechas"
-  // Aquí sí se recalculan todas las fechas con la lógica de cercanía.
-  // ─────────────────────────────────────────────────────────────────────────
   const handleGenerateDates = () => {
     if (!packageStartDate) {
       setMessage({ open: true, text: 'Por favor selecciona la fecha de inicio del paquete', severity: 'warning' });
@@ -416,7 +354,6 @@ const handleSelectCity = async (cityItem) => {
     const T = selectedPkg.totalClasses;
     const S = selectedPkg.durationWeeks || 4;
 
-    // Convertir el objeto slotsPerPhase a array ordenado por número de fase
     const slotsArray = Object.values(slotsPerPhase).sort((a, b) => a.phase - b.phase);
 
     const generatedClasses = generateAllClasses(
@@ -431,7 +368,6 @@ const handleSelectCity = async (cityItem) => {
     setMessage({ open: true, text: `✅ ${T} clases generadas correctamente desde el ${moment(packageStartDate).format('DD/MM/YYYY')}`, severity: 'success' });
   };
 
-  // ─── Helpers ───
   const fetchCities = async (countryName) => {
     if (!countryName) return;
     setLoadingCities(true);
@@ -465,8 +401,8 @@ const handleSelectCity = async (cityItem) => {
       setMessage({ open: true, text: translations.fillRequiredFields || 'Por favor completa todos los campos obligatorios', severity: 'error' });
       return false;
     }
-    if(!regexEmail.test(formData.email)){
-        setMessage({ open: true, text: translations.fillRequiredFields || 'Formato de correo invalido', severity: 'error' });
+    if (!regexEmail.test(formData.email)) {
+      setMessage({ open: true, text: translations.fillRequiredFields || 'Formato de correo invalido', severity: 'error' });
       return false;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -511,6 +447,12 @@ const handleSelectCity = async (cityItem) => {
     if (open) fetchCountries();
   }, [open]);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIX 1: handleAddStudent corregido
+  // - studentId se extrae DESPUÉS de obtener la respuesta
+  // - El bloque de paquete/clases solo corre si hay formData.package
+  // - weeklyScheduleFromClasses se construye desde slotsPerPhase (no weeklyScheduleSlots vacío)
+  // ─────────────────────────────────────────────────────────────────────────
   const handleAddStudent = async () => {
     if (!validateForm()) return;
     setLoading(true);
@@ -528,17 +470,22 @@ const handleSelectCity = async (cityItem) => {
         timezone: timezone,
         zoomLink: formData.zoomLink || '',
         allowDifferentTeacher: formData.allowDifferentTeacher || false,
-        weeklySchedule: weeklyScheduleSlots 
+        weeklySchedule: weeklyScheduleSlots
       };
 
       const response = await authAPI.register(userData);
 
-      if (response && (response.studentId || response.userId)) {
-        const studentId = response.studentId;
+      // ✅ FIX: obtener studentId AQUÍ, después de la respuesta
+      const studentId = response?.studentId;
+      if (!studentId) {
+        throw new Error('No se recibió el ID del estudiante del servidor');
+      }
 
+      // ✅ FIX: solo ejecutar lógica de paquete si se seleccionó uno
+      if (formData.package) {
         const packageDetails = packages.find(pkg => pkg.id === formData.package);
         const startDate = packageStartDate || new Date().toISOString().split('T')[0];
-        const endDate = moment(startDate).add(packageDetails.durationMonths || 1, 'months').format('YYYY-MM-DD');
+        const endDate = moment(startDate).add(packageDetails?.durationMonths || 1, 'months').format('YYYY-MM-DD');
 
         await studentAPI.assignPackage(studentId, {
           packageId: formData.package,
@@ -546,55 +493,48 @@ const handleSelectCity = async (cityItem) => {
           endDate,
         });
 
+        // ✅ FIX: weeklySchedule construido desde slotsPerPhase (fuente correcta)
+        const weeklyScheduleFromClasses = Object.values(slotsPerPhase).map(slot => ({
+          day: slot.day,
+          hour: parseInt(slot.start.split(':')[0]),
+          startTime: slot.start,
+          endTime: slot.end,
+        }));
+
         if (selectedTeacher) {
-          const weeklySchedule = scheduledClasses
-            .filter(cls => cls.date && cls.startTime)
-            .map(cls => ({
-              day: moment(cls.date).format('dddd').toLowerCase(),
-              hour: parseInt(cls.startTime.split(':')[0]),
-              startTime: cls.startTime,
-              endTime: cls.endTime
-            }))
-            .slice(0, 1);
-
-          const uniqueWeeklySchedule = Array.from(new Set(weeklySchedule.map(s => JSON.stringify(s)))).map(s => JSON.parse(s));
-
           await fetchWithAuth(`/teachers/${selectedTeacher}/students`, {
             method: 'POST',
-            body: JSON.stringify({ studentId, weeklySchedule: weeklyScheduleSlots })
-
+            body: JSON.stringify({ studentId, weeklySchedule: weeklyScheduleFromClasses })
           });
         }
 
         const validClasses = scheduledClasses.filter(cls => cls.date && cls.startTime && cls.endTime && !cls.isPreview);
-        await studentAPI.scheduleClasses(studentId, {
-          packageId: formData.package,
-          weeklySchedule: weeklyScheduleSlots,
-          classes: validClasses.map(cls => ({ ...cls, teacherId: selectedTeacher }))
-        });
-
-        setMessage({ open: true, text: translations.studentAddedSuccess, severity: 'success' });
-        if (typeof refreshStudents === 'function') refreshStudents();
-        onClose();
-      }
-    } catch (error) {
-        console.error('Error al guardar estudiante:', error);
-        
-        // Si el error es 409 (Conflicto) o el mensaje indica que ya existe
-        if (error.status === 409 || error.message.toLowerCase().includes('exists')) {
-          setUsernameError('Este nombre de usuario ya está en uso, no lo puedes usar');
-          
-          // Vaciamos solo el nombre de usuario, manteniendo todo lo demás intacto
-          setFormData(prev => ({ ...prev, username: '' })); 
-          
-          setMessage({ open: true, text: 'Error: El usuario ya existe', severity: 'error' });
-        } else {
-          setMessage({ open: true, text: error.message, severity: 'error' });
+        if (validClasses.length > 0) {
+          await studentAPI.scheduleClasses(studentId, {
+            packageId: formData.package,
+            weeklySchedule: weeklyScheduleFromClasses,
+            classes: validClasses.map(cls => ({ ...cls, teacherId: selectedTeacher || undefined }))
+          });
         }
-      } finally {
-        setLoading(false);
       }
-   };
+
+      setMessage({ open: true, text: translations.studentAddedSuccess, severity: 'success' });
+      if (typeof refreshStudents === 'function') refreshStudents();
+      onClose();
+
+    } catch (error) {
+      console.error('Error al guardar estudiante:', error);
+      if (error.status === 409 || error.message?.toLowerCase().includes('exists')) {
+        setUsernameError('Este nombre de usuario ya está en uso, no lo puedes usar');
+        setFormData(prev => ({ ...prev, username: '' }));
+        setMessage({ open: true, text: 'Error: El usuario ya existe', severity: 'error' });
+      } else {
+        setMessage({ open: true, text: error.message || 'Error desconocido', severity: 'error' });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ─── Derivados para UI ───
   const selectedPkg = packages.find(pkg => pkg.id === formData.package);
@@ -636,6 +576,7 @@ const handleSelectCity = async (cityItem) => {
           {/* Teléfono */}
           <Grid item xs={12} sm={6}>
             <Box sx={{ display: 'flex', gap: 1 }}>
+              {/* ✅ FIX 2: extraer key de props para evitar el warning de React */}
               <Autocomplete
                 options={allCountries}
                 getOptionLabel={(option) => `${option.code} ${option.dialCode}`}
@@ -651,14 +592,17 @@ const handleSelectCity = async (cityItem) => {
                 loading={loadingCountries}
                 disableClearable
                 sx={{ width: '160px' }}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props} sx={{ display: 'flex', gap: 1, fontSize: '0.85rem' }}>
-                    <img src={option.flag} alt={option.code} width="20" />
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{option.code}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>{option.dialCode}</Typography>
-                    <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{option.name}</Typography>
-                  </Box>
-                )}
+                renderOption={(props, option) => {
+                  const { key, ...optionProps } = props;
+                  return (
+                    <Box component="li" key={key} {...optionProps} sx={{ display: 'flex', gap: 1, fontSize: '0.85rem' }}>
+                      <img src={option.flag} alt={option.code} width="20" />
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>{option.code}</Typography>
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>{option.dialCode}</Typography>
+                      <Typography variant="caption" sx={{ ml: 'auto', opacity: 0.6 }}>{option.name}</Typography>
+                    </Box>
+                  );
+                }}
                 renderInput={(params) => (
                   <TextField {...params} label="País" variant="outlined" sx={{ ...textFieldStyle(theme), mt: 0 }}
                     InputProps={{ ...params.InputProps, startAdornment: (<>{loadingCountries ? <CircularProgress color="inherit" size={20} /> : null}{params.InputProps.startAdornment}</>) }}
@@ -714,11 +658,11 @@ const handleSelectCity = async (cityItem) => {
               )}
             />
           </Grid>
- 
-         <Grid item xs={12}>
+
+          <Grid item xs={12}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-               <GlobeIcon sx={{ color: '#845EC2' }} />
-               <Typography variant="subtitle2" fontWeight="bold">Zona Horaria del Estudiante</Typography>
+              <GlobeIcon sx={{ color: '#845EC2' }} />
+              <Typography variant="subtitle2" fontWeight="bold">Zona Horaria del Estudiante</Typography>
             </Box>
             <Autocomplete
               options={availableTimezones}
@@ -737,7 +681,6 @@ const handleSelectCity = async (cityItem) => {
               )}
             />
           </Grid>
-             
 
           {/* Paquete */}
           <Grid item xs={12} sm={6}>
@@ -783,7 +726,6 @@ const handleSelectCity = async (cityItem) => {
                 Paso 1 — Selecciona los bloques horarios ({Object.keys(slotsPerPhase).length} de {totalPhases} seleccionados)
               </Typography>
 
-              {/* Chips mostrando los slots ya seleccionados */}
               {Object.keys(slotsPerPhase).length > 0 && (
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
                   {Object.entries(slotsPerPhase)
@@ -804,7 +746,6 @@ const handleSelectCity = async (cityItem) => {
                 </Box>
               )}
 
-              {/* Navegación de fases */}
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                 <Typography variant="body2" sx={{ color: theme.text?.secondary, mr: 1 }}>
                   Configurando bloque {currentPhase} de {totalPhases} — haz clic en el calendario de abajo
@@ -874,7 +815,6 @@ const handleSelectCity = async (cityItem) => {
                     value={packageStartDate ? moment(packageStartDate) : null}
                     onChange={(date) => {
                       setPackageStartDate(date ? date.format('YYYY-MM-DD') : null);
-                      // Si cambia la fecha, limpiar fechas generadas para forzar regenerar
                       setScheduledClasses(prev => prev.map(c => ({ ...c, isPreview: true })));
                     }}
                     minDate={moment()}
@@ -906,7 +846,6 @@ const handleSelectCity = async (cityItem) => {
                 </Button>
               </Box>
 
-              {/* Estado de generación */}
               {datesGenerated && (
                 <Alert severity="success" sx={{ mt: 2 }}>
                   ✅ Fechas generadas. El bloque más cercano al {moment(packageStartDate).format('DD/MM/YYYY')} fue asignado como Clase 1.
@@ -932,7 +871,7 @@ const handleSelectCity = async (cityItem) => {
               packageId={formData.package}
               teacherId={selectedTeacher}
               teacherValidationFn={teacherValidationFn}
-              onScheduleChange={handleScheduleChange} 
+              onScheduleChange={handleScheduleChange}
             />
           </Box>
         )}
