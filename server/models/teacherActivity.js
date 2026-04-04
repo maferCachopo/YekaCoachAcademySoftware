@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-  const TeacherActivity = sequelize.define('TeacherActivity', {
+  const teacherActivity = sequelize.define('teacherActivity', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
@@ -53,10 +53,22 @@ module.exports = (sequelize, DataTypes) => {
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    // ── NEW ──
+    isPermanent: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'If true the activity repeats every week on dayOfWeek; the "date" field holds the creation/anchor date'
+    },
+    dayOfWeek: {
+      type: DataTypes.ENUM('monday','tuesday','wednesday','thursday','friday','saturday','sunday'),
+      allowNull: true,
+      comment: 'Day of week for permanent activities (populated automatically from "date" on create)'
     }
   }, {
     timestamps: true
   });
 
-  return TeacherActivity;
-}; 
+  return teacherActivity;
+};
